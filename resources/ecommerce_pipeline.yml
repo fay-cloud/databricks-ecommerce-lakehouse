@@ -6,5 +6,6 @@ resources:
 
       tasks:
         - task_key: bronze_ingestion
-          notebook_task:
-            notebook_path: ../notebooks/development/bronze_ingestion.py
+          spark_python_task:
+            python_file: ../notebooks/development/bronze_ingestion.py
+            source: WORKSPACE
