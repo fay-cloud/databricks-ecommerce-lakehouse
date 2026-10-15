@@ -1,3 +1,4 @@
+
 resources:
   jobs:
     ecommerce_pipeline:
@@ -9,3 +10,4 @@ resources:
           spark_python_task:
             python_file: ../notebooks/development/bronze_ingestion.py
             source: WORKSPACE
+          existing_cluster_id: e5f020d0-1be5-3aca-8b11-e2b1704a83b6
