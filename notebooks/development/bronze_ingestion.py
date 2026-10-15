@@ -1,0 +1,1 @@
+print("Bronze ingestion notebook initialized")

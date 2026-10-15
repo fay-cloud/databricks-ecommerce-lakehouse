@@ -1,0 +1,10 @@
+resources:
+  jobs:
+    ecommerce_pipeline:
+      name: ecommerce_lakehouse_${bundle.target}
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: bronze_ingestion
+          notebook_task:
+            notebook_path: ../notebooks/development/bronze_ingestion.py

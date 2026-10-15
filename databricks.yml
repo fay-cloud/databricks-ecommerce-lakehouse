@@ -1,0 +1,32 @@
+bundle:
+  name: databricks_ecommerce_lakehouse
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for the deployment environment
+    default: de_dev
+
+targets:
+  dev:
+    default: true
+    mode: development
+    variables:
+      catalog: de_dev
+
+  test:
+    mode: production
+    variables:
+      catalog: de_test
+
+  stage:
+    mode: production
+    variables:
+      catalog: de_stage
+
+  prod:
+    mode: production
+    variables:
+      catalog: de_prod
