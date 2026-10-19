@@ -1,4 +1,3 @@
-
 from pyspark.sql import functions as F
 
 # ---------------------------------------------------------
@@ -50,8 +49,15 @@ if missing_files:
 for source_file, table_name in SOURCES:
     print(f"Starting ingestion: {source_file}")
 
-    source_schema_path = f"{STATE_PATH}/schemas/{table_name}"
-    checkpoint_path = f"{STATE_PATH}/checkpoints/{table_name}"
+    # Use a fresh schema/checkpoint namespace for reviews so that
+    # the review CSV is reparsed with the corrected CSV options.
+    if table_name == "olist_order_reviews":
+        state_table_name = f"{table_name}_v2"
+    else:
+        state_table_name = table_name
+
+    source_schema_path = f"{STATE_PATH}/schemas/{state_table_name}"
+    checkpoint_path = f"{STATE_PATH}/checkpoints/{state_table_name}"
     target_table = f"{BRONZE_SCHEMA}.{table_name}"
 
     source_df = (
@@ -62,17 +68,20 @@ for source_file, table_name in SOURCES:
         .option("cloudFiles.schemaEvolutionMode", "rescue")
         .option("cloudFiles.inferColumnTypes", "true")
         .option("header", "true")
+        .option("quote", '"')
+        .option("escape", '"')
+        .option("multiLine", "true")
+        .option("mode", "PERMISSIVE")
         .option("pathGlobFilter", source_file)
         .option("rescuedDataColumn", "_rescued_data")
         .load(RAW_PATH)
     )
 
-
     bronze_df = (
         source_df
         .withColumn("_source_file", F.col("_metadata.file_path"))
         .withColumn("_ingested_at", F.current_timestamp())
-)
+    )
 
     query = (
         bronze_df.writeStream

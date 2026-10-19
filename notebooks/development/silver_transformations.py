@@ -1,4 +1,3 @@
-
 # SILVER LAYER LOGIC
 # - Schema enforcement and schema evolution
 # - Data type casting and standardisation
@@ -308,8 +307,198 @@ print(
     f"Quarantined rows={invalid_payments.count()}"
 )
 
+
 # ---------------------------------------------------------
-# 6. Automated Silver data quality gates
+# 7. Reviews: validate keys and review scores
+# ---------------------------------------------------------
+reviews = spark.table(f"{BRONZE}.olist_order_reviews")
+
+# Safely parse the score before applying numeric validation.
+# Malformed values become NULL and are quarantined instead of failing the job.
+reviews_checked = (
+    reviews
+    .withColumn("_review_score_int", F.expr("try_cast(review_score AS INT)"))
+    .withColumn(
+        "_rejection_reason",
+        F.when(F.col("review_id").isNull(), "missing_review_id")
+         .when(F.col("order_id").isNull(), "missing_order_id")
+         .when(F.col("_review_score_int").isNull(), "missing_or_invalid_review_score")
+         .when((F.col("_review_score_int") < 1) | (F.col("_review_score_int") > 5),
+               "review_score_out_of_range")
+    )
+)
+
+invalid_reviews = reviews_checked.filter(F.col("_rejection_reason").isNotNull())
+valid_reviews = reviews_checked.filter(F.col("_rejection_reason").isNull())
+
+(
+    invalid_reviews.select(*reviews.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{QUARANTINE}.olist_order_reviews")
+)
+
+silver_reviews = (
+    valid_reviews
+    .drop("_rejection_reason", "_rescued_data", "review_score")
+    .withColumnRenamed("_review_score_int", "review_score")
+    .withColumn("review_id", F.trim("review_id"))
+    .withColumn("order_id", F.trim("order_id"))
+    .withColumn("review_comment_title", F.trim("review_comment_title"))
+    .withColumn("review_comment_message", F.trim("review_comment_message"))
+)
+
+(
+    silver_reviews.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{SILVER}.olist_order_reviews")
+)
+
+# ---------------------------------------------------------
+# 8. Geolocation: validate coordinates and standardise labels
+# ---------------------------------------------------------
+geolocation = spark.table(f"{BRONZE}.olist_geolocation")
+
+# Parse coordinates safely so malformed strings are quarantined, not fatal.
+geolocation_checked = (
+    geolocation
+    .withColumn("_latitude_decimal", F.expr("try_cast(geolocation_lat AS DECIMAL(10,7))"))
+    .withColumn("_longitude_decimal", F.expr("try_cast(geolocation_lng AS DECIMAL(10,7))"))
+    .withColumn(
+        "_rejection_reason",
+        F.when(F.col("geolocation_zip_code_prefix").isNull(), "missing_zip_code_prefix")
+         .when(F.col("_latitude_decimal").isNull(), "missing_or_invalid_latitude")
+         .when(F.col("_longitude_decimal").isNull(), "missing_or_invalid_longitude")
+         .when((F.col("_latitude_decimal") < -90) | (F.col("_latitude_decimal") > 90),
+               "latitude_out_of_range")
+         .when((F.col("_longitude_decimal") < -180) | (F.col("_longitude_decimal") > 180),
+               "longitude_out_of_range")
+    )
+)
+
+invalid_geolocation = geolocation_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+valid_geolocation = geolocation_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
+
+(
+    invalid_geolocation.select(*geolocation.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{QUARANTINE}.olist_geolocation")
+)
+
+silver_geolocation = (
+    valid_geolocation
+    .drop(
+        "_rejection_reason", "_rescued_data",
+        "geolocation_lat", "geolocation_lng"
+    )
+    .withColumnRenamed("_latitude_decimal", "geolocation_lat")
+    .withColumnRenamed("_longitude_decimal", "geolocation_lng")
+    .withColumn(
+        "geolocation_zip_code_prefix",
+        F.lpad(F.col("geolocation_zip_code_prefix").cast("string"), 5, "0")
+    )
+    .withColumn("geolocation_city", F.lower(F.trim("geolocation_city")))
+    .withColumn("geolocation_state", F.upper(F.trim("geolocation_state")))
+)
+
+(
+    silver_geolocation.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{SILVER}.olist_geolocation")
+)
+
+# Geolocation intentionally has no uniqueness gate: many rows can share a ZIP prefix.
+
+
+# ---------------------------------------------------------
+# 9. Product category translation: validate and standardise
+# ---------------------------------------------------------
+translations = spark.table(
+    f"{BRONZE}.product_category_translation"
+)
+
+translations_checked = translations.withColumn(
+    "_rejection_reason",
+    F.when(
+        F.col("product_category_name").isNull(),
+        "missing_product_category_name"
+    )
+    .when(
+        F.trim(F.col("product_category_name")) == "",
+        "blank_product_category_name"
+    )
+    .when(
+        F.col("product_category_name_english").isNull(),
+        "missing_english_category_name"
+    )
+    .when(
+        F.trim(F.col("product_category_name_english")) == "",
+        "blank_english_category_name"
+    )
+)
+
+invalid_translations = translations_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+
+valid_translations = translations_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
+
+(
+    invalid_translations
+    .select(*translations.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(
+        f"{QUARANTINE}.product_category_name_translation"
+    )
+)
+
+silver_translations = (
+    valid_translations
+    .drop("_rejection_reason", "_rescued_data")
+    .withColumn(
+        "product_category_name",
+        F.lower(F.trim("product_category_name"))
+    )
+    .withColumn(
+        "product_category_name_english",
+        F.lower(F.trim("product_category_name_english"))
+    )
+)
+
+(
+    silver_translations.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(
+        f"{SILVER}.product_category_name_translation"
+    )
+)
+
+print(
+    "product_category_name_translation: "
+    f"Silver rows={silver_translations.count()}, "
+    f"Quarantined rows={invalid_translations.count()}"
+)
+
+
+# ---------------------------------------------------------
+# 10. Automated Silver data quality gates
 # ---------------------------------------------------------
 
 def assert_zero_rows(check_name, query):
@@ -457,6 +646,44 @@ assert_zero_rows(
     """
 )
 
+
+# 4. Reviews, geolocation, and category translation quality gates
+assert_zero_rows(
+    "duplicate_review_ids",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT review_id
+        FROM de_dev.silver.olist_order_reviews
+        GROUP BY review_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "reviews_without_order",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_order_reviews r
+    LEFT ANTI JOIN de_dev.silver.olist_orders o
+      ON r.order_id = o.order_id
+    """
+)
+
+assert_zero_rows(
+    "duplicate_category_translation_keys",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT product_category_name
+        FROM de_dev.silver.product_category_name_translation
+        GROUP BY product_category_name
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
 # ---------------------------------------------------------
 # Final Silver and quarantine row counts
 # ---------------------------------------------------------
@@ -467,6 +694,9 @@ for table_name in [
     "olist_products",
     "olist_sellers",
     "olist_order_payments",
+    "olist_order_reviews",
+    "olist_geolocation",
+    "product_category_name_translation",
 ]:
     silver_count = spark.table(f"{SILVER}.{table_name}").count()
     quarantine_count = spark.table(f"{QUARANTINE}.{table_name}").count()
