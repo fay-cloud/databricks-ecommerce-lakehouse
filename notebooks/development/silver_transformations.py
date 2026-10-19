@@ -1,18 +1,3 @@
-# SILVER LAYER LOGIC
-# - Schema enforcement and schema evolution
-# - Data type casting and standardisation
-# - Required-field and business-rule validation
-# - Duplicate detection and deduplication
-# - Data quality checks and quality gates
-# - Referential integrity validation
-# - Quarantine invalid records with rejection reasons
-# - Rescued data handling
-# - Source metadata and data lineage
-# - Idempotent processing and incremental MERGE (planned)
-# - CDC processing and SCD Type 1/Type 2 (planned)
-# - Late-arriving data handling (planned)
-# - Full-refresh overwrite for the current initial implementation
-
 
 from pyspark.sql import functions as F
 
@@ -320,8 +305,14 @@ reviews_checked = (
     .withColumn("_review_score_int", F.expr("try_cast(review_score AS INT)"))
     .withColumn(
         "_rejection_reason",
-        F.when(F.col("review_id").isNull(), "missing_review_id")
-         .when(F.col("order_id").isNull(), "missing_order_id")
+        F.when(
+            F.col("review_id").isNull() | (F.trim(F.col("review_id")) == ""),
+            "missing_review_id"
+        )
+         .when(
+            F.col("order_id").isNull() | (F.trim(F.col("order_id")) == ""),
+            "missing_order_id"
+        )
          .when(F.col("_review_score_int").isNull(), "missing_or_invalid_review_score")
          .when((F.col("_review_score_int") < 1) | (F.col("_review_score_int") > 5),
                "review_score_out_of_range")
@@ -420,64 +411,39 @@ silver_geolocation = (
 
 # Geolocation intentionally has no uniqueness gate: many rows can share a ZIP prefix.
 
-
 # ---------------------------------------------------------
 # 9. Product category translation: validate and standardise
 # ---------------------------------------------------------
-translations = spark.table(
-    f"{BRONZE}.product_category_translation"
-)
+translations = spark.table(f"{BRONZE}.product_category_name_translation")
 
 translations_checked = translations.withColumn(
     "_rejection_reason",
-    F.when(
-        F.col("product_category_name").isNull(),
-        "missing_product_category_name"
-    )
-    .when(
-        F.trim(F.col("product_category_name")) == "",
-        "blank_product_category_name"
-    )
-    .when(
-        F.col("product_category_name_english").isNull(),
-        "missing_english_category_name"
-    )
-    .when(
-        F.trim(F.col("product_category_name_english")) == "",
-        "blank_english_category_name"
-    )
+    F.when(F.col("product_category_name").isNull(), "missing_product_category_name")
+     .when(F.trim(F.col("product_category_name")) == "", "blank_product_category_name")
+     .when(F.col("product_category_name_english").isNull(), "missing_english_category_name")
+     .when(F.trim(F.col("product_category_name_english")) == "", "blank_english_category_name")
 )
 
 invalid_translations = translations_checked.filter(
     F.col("_rejection_reason").isNotNull()
 )
-
 valid_translations = translations_checked.filter(
     F.col("_rejection_reason").isNull()
 )
 
 (
-    invalid_translations
-    .select(*translations.columns, "_rejection_reason")
+    invalid_translations.select(*translations.columns, "_rejection_reason")
     .write.format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
-    .saveAsTable(
-        f"{QUARANTINE}.product_category_name_translation"
-    )
+    .saveAsTable(f"{QUARANTINE}.product_category_name_translation")
 )
 
 silver_translations = (
     valid_translations
     .drop("_rejection_reason", "_rescued_data")
-    .withColumn(
-        "product_category_name",
-        F.lower(F.trim("product_category_name"))
-    )
-    .withColumn(
-        "product_category_name_english",
-        F.lower(F.trim("product_category_name_english"))
-    )
+    .withColumn("product_category_name", F.lower(F.trim("product_category_name")))
+    .withColumn("product_category_name_english", F.lower(F.trim("product_category_name_english")))
 )
 
 (
@@ -485,17 +451,8 @@ silver_translations = (
     .format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
-    .saveAsTable(
-        f"{SILVER}.product_category_name_translation"
-    )
+    .saveAsTable(f"{SILVER}.product_category_name_translation")
 )
-
-print(
-    "product_category_name_translation: "
-    f"Silver rows={silver_translations.count()}, "
-    f"Quarantined rows={invalid_translations.count()}"
-)
-
 
 # ---------------------------------------------------------
 # 10. Automated Silver data quality gates
