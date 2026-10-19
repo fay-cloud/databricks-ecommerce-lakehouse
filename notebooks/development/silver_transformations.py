@@ -414,45 +414,83 @@ silver_geolocation = (
 # ---------------------------------------------------------
 # 9. Product category translation: validate and standardise
 # ---------------------------------------------------------
-translations = spark.table(f"{BRONZE}.product_category_name_translation")
+translations = spark.table(
+    f"{BRONZE}.product_category_translation"
+)
 
 translations_checked = translations.withColumn(
     "_rejection_reason",
-    F.when(F.col("product_category_name").isNull(), "missing_product_category_name")
-     .when(F.trim(F.col("product_category_name")) == "", "blank_product_category_name")
-     .when(F.col("product_category_name_english").isNull(), "missing_english_category_name")
-     .when(F.trim(F.col("product_category_name_english")) == "", "blank_english_category_name")
+    F.when(
+        F.col("product_category_name").isNull(),
+        "missing_product_category_name"
+    )
+    .when(
+        F.trim(F.col("product_category_name")) == "",
+        "blank_product_category_name"
+    )
+    .when(
+        F.col("product_category_name_english").isNull(),
+        "missing_english_category_name"
+    )
+    .when(
+        F.trim(F.col("product_category_name_english")) == "",
+        "blank_english_category_name"
+    )
 )
 
 invalid_translations = translations_checked.filter(
     F.col("_rejection_reason").isNotNull()
 )
+
 valid_translations = translations_checked.filter(
     F.col("_rejection_reason").isNull()
 )
 
+# Quarantine invalid category translations.
 (
-    invalid_translations.select(*translations.columns, "_rejection_reason")
-    .write.format("delta")
-    .mode("overwrite")
-    .option("overwriteSchema", "true")
-    .saveAsTable(f"{QUARANTINE}.product_category_name_translation")
-)
-
-silver_translations = (
-    valid_translations
-    .drop("_rejection_reason", "_rescued_data")
-    .withColumn("product_category_name", F.lower(F.trim("product_category_name")))
-    .withColumn("product_category_name_english", F.lower(F.trim("product_category_name_english")))
-)
-
-(
-    silver_translations.write
+    invalid_translations
+    .select(*translations.columns, "_rejection_reason")
+    .write
     .format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
-    .saveAsTable(f"{SILVER}.product_category_name_translation")
+    .saveAsTable(
+        f"{QUARANTINE}.product_category_name_translation"
+    )
 )
+
+# Standardise valid category translations.
+silver_translations = (
+    valid_translations
+    .drop("_rejection_reason", "_rescued_data")
+    .withColumn(
+        "product_category_name",
+        F.lower(F.trim("product_category_name"))
+    )
+    .withColumn(
+        "product_category_name_english",
+        F.lower(F.trim("product_category_name_english"))
+    )
+)
+
+# Write the Silver table.
+(
+    silver_translations
+    .write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(
+        f"{SILVER}.product_category_name_translation"
+    )
+)
+
+print(
+    "product_category_name_translation: "
+    f"Silver rows={silver_translations.count()}, "
+    f"Quarantined rows={invalid_translations.count()}"
+)
+
 
 # ---------------------------------------------------------
 # 10. Automated Silver data quality gates
