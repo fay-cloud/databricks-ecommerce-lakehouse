@@ -164,3 +164,88 @@ for table_name in ["olist_orders", "olist_order_items", "olist_customers"]:
     )
 
 print("Initial Silver transformations completed.")
+
+
+# ---------------------------------------------------------
+# 4. Products: validate and standardise
+# ---------------------------------------------------------
+products = spark.table(f"{BRONZE}.olist_products")
+
+products_checked = products.withColumn(
+    "_rejection_reason",
+    F.when(F.col("product_id").isNull(), "missing_product_id")
+)
+
+invalid_products = products_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+
+valid_products = products_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
+
+(
+    invalid_products.select(*products.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{QUARANTINE}.olist_products")
+)
+
+silver_products = (
+    valid_products
+    .drop("_rejection_reason", "_rescued_data")
+    .withColumn(
+        "product_category_name",
+        F.lower(F.trim("product_category_name"))
+    )
+)
+
+(
+    silver_products.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{SILVER}.olist_products")
+)
+
+# ---------------------------------------------------------
+# 5. Sellers: validate and standardise
+# ---------------------------------------------------------
+sellers = spark.table(f"{BRONZE}.olist_sellers")
+
+sellers_checked = sellers.withColumn(
+    "_rejection_reason",
+    F.when(F.col("seller_id").isNull(), "missing_seller_id")
+)
+
+invalid_sellers = sellers_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+
+valid_sellers = sellers_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
+
+(
+    invalid_sellers.select(*sellers.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{QUARANTINE}.olist_sellers")
+)
+
+silver_sellers = (
+    valid_sellers
+    .drop("_rejection_reason", "_rescued_data")
+    .withColumn("seller_city", F.lower(F.trim("seller_city")))
+    .withColumn("seller_state", F.upper(F.trim("seller_state")))
+)
+
+(
+    silver_sellers.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{SILVER}.olist_sellers")
+)
