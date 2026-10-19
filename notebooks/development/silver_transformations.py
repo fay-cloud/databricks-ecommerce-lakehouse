@@ -249,3 +249,132 @@ silver_sellers = (
     .option("overwriteSchema", "true")
     .saveAsTable(f"{SILVER}.olist_sellers")
 )
+
+
+
+# ---------------------------------------------------------
+# 6. Automated Silver data quality gates
+# ---------------------------------------------------------
+
+def assert_zero_rows(check_name, query):
+    """Fail the pipeline if a critical quality check finds rows."""
+    violation_count = spark.sql(query).first()[0]
+
+    print(f"Quality check: {check_name} = {violation_count}")
+
+    if violation_count != 0:
+        raise ValueError(
+            f"DATA QUALITY FAILURE: {check_name} "
+            f"found {violation_count} violating rows."
+        )
+
+
+# 1. Primary key uniqueness
+assert_zero_rows(
+    "duplicate_order_ids",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT order_id
+        FROM de_dev.silver.olist_orders
+        GROUP BY order_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "duplicate_customer_ids",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT customer_id
+        FROM de_dev.silver.olist_customers
+        GROUP BY customer_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "duplicate_product_ids",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT product_id
+        FROM de_dev.silver.olist_products
+        GROUP BY product_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "duplicate_seller_ids",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT seller_id
+        FROM de_dev.silver.olist_sellers
+        GROUP BY seller_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "duplicate_order_item_keys",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT order_id, order_item_id
+        FROM de_dev.silver.olist_order_items
+        GROUP BY order_id, order_item_id
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+# 2. Referential integrity
+assert_zero_rows(
+    "orders_without_customer",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_orders o
+    LEFT ANTI JOIN de_dev.silver.olist_customers c
+      ON o.customer_id = c.customer_id
+    """
+)
+
+assert_zero_rows(
+    "order_items_without_order",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_order_items i
+    LEFT ANTI JOIN de_dev.silver.olist_orders o
+      ON i.order_id = o.order_id
+    """
+)
+
+assert_zero_rows(
+    "order_items_without_product",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_order_items i
+    LEFT ANTI JOIN de_dev.silver.olist_products p
+      ON i.product_id = p.product_id
+    """
+)
+
+assert_zero_rows(
+    "order_items_without_seller",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_order_items i
+    LEFT ANTI JOIN de_dev.silver.olist_sellers s
+      ON i.seller_id = s.seller_id
+    """
+)
+
+print("All critical Silver data quality gates passed.")
+
