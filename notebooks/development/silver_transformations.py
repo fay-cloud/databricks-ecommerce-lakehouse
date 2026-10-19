@@ -294,37 +294,53 @@ print(
 
 
 # ---------------------------------------------------------
-# 7. Reviews: validate keys and review scores
+# Reviews: validate identifiers and review scores
 # ---------------------------------------------------------
 reviews = spark.table(f"{BRONZE}.olist_order_reviews")
 
-# Safely parse the score before applying numeric validation.
-# Malformed values become NULL and are quarantined instead of failing the job.
 reviews_checked = (
     reviews
-    .withColumn("_review_score_int", F.expr("try_cast(review_score AS INT)"))
+    .withColumn(
+        "_review_score_int",
+        F.expr("try_cast(review_score AS INT)")
+    )
     .withColumn(
         "_rejection_reason",
         F.when(
-            F.col("review_id").isNull() | (F.trim(F.col("review_id")) == ""),
-            "missing_review_id"
+            F.col("review_id").isNull()
+            | (~F.col("review_id").rlike("^[0-9a-fA-F]{32}$")),
+            "invalid_review_id"
         )
-         .when(
-            F.col("order_id").isNull() | (F.trim(F.col("order_id")) == ""),
-            "missing_order_id"
+        .when(
+            F.col("order_id").isNull()
+            | (~F.col("order_id").rlike("^[0-9a-fA-F]{32}$")),
+            "invalid_order_id"
         )
-         .when(F.col("_review_score_int").isNull(), "missing_or_invalid_review_score")
-         .when((F.col("_review_score_int") < 1) | (F.col("_review_score_int") > 5),
-               "review_score_out_of_range")
+        .when(
+            F.col("_review_score_int").isNull(),
+            "missing_or_invalid_review_score"
+        )
+        .when(
+            (F.col("_review_score_int") < 1)
+            | (F.col("_review_score_int") > 5),
+            "review_score_out_of_range"
+        )
     )
 )
 
-invalid_reviews = reviews_checked.filter(F.col("_rejection_reason").isNotNull())
-valid_reviews = reviews_checked.filter(F.col("_rejection_reason").isNull())
+invalid_reviews = reviews_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+
+valid_reviews = reviews_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
 
 (
-    invalid_reviews.select(*reviews.columns, "_rejection_reason")
-    .write.format("delta")
+    invalid_reviews
+    .select(*reviews.columns, "_rejection_reason")
+    .write
+    .format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
     .saveAsTable(f"{QUARANTINE}.olist_order_reviews")
@@ -334,18 +350,25 @@ silver_reviews = (
     valid_reviews
     .drop("_rejection_reason", "_rescued_data", "review_score")
     .withColumnRenamed("_review_score_int", "review_score")
-    .withColumn("review_id", F.trim("review_id"))
-    .withColumn("order_id", F.trim("order_id"))
+    .withColumn("review_id", F.lower(F.trim("review_id")))
+    .withColumn("order_id", F.lower(F.trim("order_id")))
     .withColumn("review_comment_title", F.trim("review_comment_title"))
     .withColumn("review_comment_message", F.trim("review_comment_message"))
 )
 
 (
-    silver_reviews.write
+    silver_reviews
+    .write
     .format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
     .saveAsTable(f"{SILVER}.olist_order_reviews")
+)
+
+print(
+    "olist_order_reviews: "
+    f"Silver rows={silver_reviews.count()}, "
+    f"Quarantined rows={invalid_reviews.count()}"
 )
 
 # ---------------------------------------------------------
