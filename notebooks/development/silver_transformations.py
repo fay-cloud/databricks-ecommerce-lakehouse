@@ -1,4 +1,20 @@
 
+# SILVER LAYER LOGIC
+# - Schema enforcement and schema evolution
+# - Data type casting and standardisation
+# - Required-field and business-rule validation
+# - Duplicate detection and deduplication
+# - Data quality checks and quality gates
+# - Referential integrity validation
+# - Quarantine invalid records with rejection reasons
+# - Rescued data handling
+# - Source metadata and data lineage
+# - Idempotent processing and incremental MERGE (planned)
+# - CDC processing and SCD Type 1/Type 2 (planned)
+# - Late-arriving data handling (planned)
+# - Full-refresh overwrite for the current initial implementation
+
+
 from pyspark.sql import functions as F
 
 BRONZE = "de_dev.bronze"
@@ -151,22 +167,6 @@ silver_customers = (
 )
 
 # ---------------------------------------------------------
-# 4. Report data quality results
-# ---------------------------------------------------------
-for table_name in ["olist_orders", "olist_order_items", "olist_customers"]:
-    silver_count = spark.table(f"{SILVER}.{table_name}").count()
-    quarantine_count = spark.table(f"{QUARANTINE}.{table_name}").count()
-
-    print(
-        f"{table_name}: "
-        f"Silver rows={silver_count}, "
-        f"Quarantined rows={quarantine_count}"
-    )
-
-print("Initial Silver transformations completed.")
-
-
-# ---------------------------------------------------------
 # 4. Products: validate and standardise
 # ---------------------------------------------------------
 products = spark.table(f"{BRONZE}.olist_products")
@@ -251,6 +251,62 @@ silver_sellers = (
 )
 
 
+
+
+# ---------------------------------------------------------
+# 6. Payments: validate and standardise payment fields
+# ---------------------------------------------------------
+payments = spark.table(f"{BRONZE}.olist_order_payments")
+
+payments_checked = payments.withColumn(
+    "_rejection_reason",
+    F.when(F.col("order_id").isNull(), "missing_order_id")
+     .when(F.col("payment_sequential").isNull(), "missing_payment_sequential")
+     .when(F.col("payment_type").isNull(), "missing_payment_type")
+     .when(F.col("payment_value").isNull(), "missing_payment_value")
+     .when(F.col("payment_value") < 0, "negative_payment_value")
+     .when(F.col("payment_installments").isNull(), "missing_payment_installments")
+     .when(F.col("payment_installments") < 0, "negative_payment_installments")
+)
+
+invalid_payments = payments_checked.filter(
+    F.col("_rejection_reason").isNotNull()
+)
+
+valid_payments = payments_checked.filter(
+    F.col("_rejection_reason").isNull()
+)
+
+(
+    invalid_payments.select(*payments.columns, "_rejection_reason")
+    .write.format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{QUARANTINE}.olist_order_payments")
+)
+
+silver_payments = (
+    valid_payments
+    .drop("_rejection_reason", "_rescued_data")
+    .withColumn("payment_type", F.lower(F.trim("payment_type")))
+    .withColumn("payment_value", F.col("payment_value").cast("decimal(12,2)"))
+    .withColumn("payment_sequential", F.col("payment_sequential").cast("int"))
+    .withColumn("payment_installments", F.col("payment_installments").cast("int"))
+)
+
+(
+    silver_payments.write
+    .format("delta")
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(f"{SILVER}.olist_order_payments")
+)
+
+print(
+    "olist_order_payments: "
+    f"Silver rows={silver_payments.count()}, "
+    f"Quarantined rows={invalid_payments.count()}"
+)
 
 # ---------------------------------------------------------
 # 6. Automated Silver data quality gates
@@ -375,6 +431,52 @@ assert_zero_rows(
       ON i.seller_id = s.seller_id
     """
 )
+
+
+# 3. Payment key uniqueness and referential integrity
+assert_zero_rows(
+    "duplicate_payment_keys",
+    """
+    SELECT COUNT(*)
+    FROM (
+        SELECT order_id, payment_sequential
+        FROM de_dev.silver.olist_order_payments
+        GROUP BY order_id, payment_sequential
+        HAVING COUNT(*) > 1
+    )
+    """
+)
+
+assert_zero_rows(
+    "payments_without_order",
+    """
+    SELECT COUNT(*)
+    FROM de_dev.silver.olist_order_payments p
+    LEFT ANTI JOIN de_dev.silver.olist_orders o
+      ON p.order_id = o.order_id
+    """
+)
+
+# ---------------------------------------------------------
+# Final Silver and quarantine row counts
+# ---------------------------------------------------------
+for table_name in [
+    "olist_orders",
+    "olist_order_items",
+    "olist_customers",
+    "olist_products",
+    "olist_sellers",
+    "olist_order_payments",
+]:
+    silver_count = spark.table(f"{SILVER}.{table_name}").count()
+    quarantine_count = spark.table(f"{QUARANTINE}.{table_name}").count()
+    print(
+        f"{table_name}: "
+        f"Silver rows={silver_count}, "
+        f"Quarantined rows={quarantine_count}"
+    )
+
+print("Silver transformations and critical data quality gates completed.")
 
 print("All critical Silver data quality gates passed.")
 
