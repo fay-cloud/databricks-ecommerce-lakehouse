@@ -67,11 +67,12 @@ for source_file, table_name in SOURCES:
         .load(RAW_PATH)
     )
 
+
     bronze_df = (
         source_df
-        .withColumn("_source_file", F.input_file_name())
+        .withColumn("_source_file", F.col("_metadata.file_path"))
         .withColumn("_ingested_at", F.current_timestamp())
-    )
+)
 
     query = (
         bronze_df.writeStream
