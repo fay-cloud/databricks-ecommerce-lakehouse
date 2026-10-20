@@ -1,4 +1,4 @@
-# Production-Grade E-Commerce Lakehouse on Azure Databricks
+# Production-Grade E-Commerce Lakehouse on Azure and Databricks
 
 An end-to-end data engineering project built with **Databricks, PySpark, Delta Lake, Unity Catalog, Auto Loader, Lakeflow Jobs, and Databricks Asset Bundles**. The project transforms the public Olist Brazilian e-commerce dataset into governed, quality-checked, analytics-ready lakehouse tables using the Medallion Architecture.
 
