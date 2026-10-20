@@ -1,19 +1,14 @@
+
 # BRONZE LAYER LOGIC
-# - Raw data ingestion from source files
-# - Incremental file ingestion using Auto Loader
-# - Schema inference and schema evolution
-# - Schema tracking and checkpoint management
+# - Incremental ingestion using Auto Loader for eight source datasets
+# - Explicit schema tracking and checkpoint management
 # - Raw data preservation in Delta tables
 # - Ingestion metadata and source lineage
-# - Idempotent file processing through checkpoints
-# - Rescued data handling for unexpected schema changes
-# - Multiple source datasets ingested independently
-# - Ingestion monitoring and record count validation
-# - Duplicate file protection through Auto Loader state
-# - Business-key deduplication in Silver
+# - Idempotent file processing through Auto Loader checkpoints
+# - Isolated, validated batch rebuild for the review dataset
+# - Source record count and data quality validation
 # - CDC processing and change tracking (planned)
-# - Support for replay and backfill (planned)
-
+# - Replay and backfill support (planned)
 
 from pyspark.sql import functions as F
 
@@ -38,8 +33,8 @@ SOURCES = [
 ]
 
 REVIEW_TABLE = f"{BRONZE_SCHEMA}.olist_order_reviews"
-REVIEW_STAGING_TABLE = f"{BRONZE_SCHEMA}.olist_order_reviews_rebuild_v3"
-REVIEW_STATE_NAME = "olist_order_reviews_v3"
+REVIEW_STAGING_TABLE = f"{BRONZE_SCHEMA}.olist_order_reviews_rebuild_v4"
+EXPECTED_REVIEW_ROWS = 99224
 
 # ---------------------------------------------------------
 # Preflight checks
@@ -50,34 +45,147 @@ available_files = {
     entry.name.rstrip("/")
     for entry in dbutils.fs.ls(RAW_PATH)
 }
+
 missing_files = [
-    source_file for source_file, _ in SOURCES
+    source_file
+    for source_file, _ in SOURCES
     if source_file not in available_files
 ]
+
 if missing_files:
     raise FileNotFoundError(
         f"Missing expected source files in {RAW_PATH}: {missing_files}"
     )
 
+
 # ---------------------------------------------------------
-# Auto Loader ingestion
+# Review dataset: controlled batch rebuild
+# ---------------------------------------------------------
+def rebuild_reviews():
+    print("Starting controlled review CSV rebuild")
+
+    review_path = f"{RAW_PATH}/olist_order_reviews_dataset.csv"
+
+    # These options were tested against the original source file.
+    source_df = (
+        spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .option("multiLine", "true")
+        .option("quote", '"')
+        .option("escape", '"')
+        .option("mode", "PERMISSIVE")
+        .load(review_path)
+    )
+
+    expected_columns = [
+        "review_id",
+        "order_id",
+        "review_score",
+        "review_comment_title",
+        "review_comment_message",
+        "review_creation_date",
+        "review_answer_timestamp",
+    ]
+
+    if source_df.columns != expected_columns:
+        raise ValueError(
+            f"Unexpected review CSV columns: {source_df.columns}"
+        )
+
+    bronze_df = (
+        source_df
+        .withColumn("_source_file", F.lit(review_path))
+        .withColumn("_ingested_at", F.current_timestamp())
+    )
+
+    # Write a fresh staging snapshot, not an append.
+    (
+        bronze_df.write
+        .format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(REVIEW_STAGING_TABLE)
+    )
+
+    staged_df = spark.table(REVIEW_STAGING_TABLE)
+
+    total_rows = staged_df.count()
+
+    invalid_condition = (
+        F.col("review_id").isNull()
+        | ~F.col("review_id").rlike("^[0-9a-f]{32}$")
+        | F.col("order_id").isNull()
+        | ~F.col("order_id").rlike("^[0-9a-f]{32}$")
+        | F.col("review_score").isNull()
+        | ~F.col("review_score").rlike("^[1-5]$")
+    )
+
+    invalid_rows = staged_df.filter(invalid_condition).count()
+
+    duplicate_pairs = (
+        staged_df
+        .filter(
+            F.col("review_id").isNotNull()
+            & F.col("order_id").isNotNull()
+        )
+        .groupBy("review_id", "order_id")
+        .count()
+        .filter(F.col("count") > 1)
+        .count()
+    )
+
+    print(f"Review staging rows: {total_rows}")
+    print(f"Review invalid rows: {invalid_rows}")
+    print(f"Duplicate review/order pairs: {duplicate_pairs}")
+
+    if total_rows != EXPECTED_REVIEW_ROWS:
+        raise ValueError(
+            f"Review row count mismatch: expected {EXPECTED_REVIEW_ROWS}, "
+            f"found {total_rows}. Production table was not replaced."
+        )
+
+    if invalid_rows != 0:
+        raise ValueError(
+            f"Review staging contains {invalid_rows} invalid rows. "
+            "Production table was not replaced."
+        )
+
+    if duplicate_pairs != 0:
+        raise ValueError(
+            f"Found {duplicate_pairs} duplicate review/order pairs. "
+            "Production table was not replaced."
+        )
+
+    # Publish only after all validations pass.
+    (
+        staged_df.write
+        .format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(REVIEW_TABLE)
+    )
+
+    print(f"Validated review snapshot published to {REVIEW_TABLE}")
+
+
+# ---------------------------------------------------------
+# Auto Loader ingestion for the other eight datasets
 # ---------------------------------------------------------
 for source_file, table_name in SOURCES:
-    print(f"Starting ingestion: {source_file}")
-    is_reviews = table_name == "olist_order_reviews"
+    if table_name == "olist_order_reviews":
+        continue
 
-    if is_reviews:
-        # Isolated state and staging table let us safely rebuild reviews.
-        state_name = REVIEW_STATE_NAME
-        write_table = REVIEW_STAGING_TABLE
-    else:
-        state_name = table_name
-        write_table = f"{BRONZE_SCHEMA}.{table_name}"
+    print(f"Starting Auto Loader ingestion: {source_file}")
+
+    state_name = table_name
+    target_table = f"{BRONZE_SCHEMA}.{table_name}"
 
     source_schema_path = f"{STATE_PATH}/schemas/{state_name}"
     checkpoint_path = f"{STATE_PATH}/checkpoints/{state_name}"
 
-    reader = (
+    source_df = (
         spark.readStream
         .format("cloudFiles")
         .option("cloudFiles.format", "csv")
@@ -87,21 +195,9 @@ for source_file, table_name in SOURCES:
         .option("header", "true")
         .option("pathGlobFilter", source_file)
         .option("rescuedDataColumn", "_rescued_data")
+        .load(RAW_PATH)
     )
 
-    if is_reviews:
-        # Review text may contain commas, quotes and embedded newlines.
-        # Keep standard backslash escaping; recover unescaped quotes at delimiters.
-        reader = (
-            reader
-            .option("quote", '"')
-            .option("escape", "\\")
-            .option("multiLine", "true")
-            .option("mode", "PERMISSIVE")
-            .option("unescapedQuoteHandling", "BACK_TO_DELIMITER")
-        )
-
-    source_df = reader.load(RAW_PATH)
     bronze_df = (
         source_df
         .withColumn("_source_file", F.col("_metadata.file_path"))
@@ -114,22 +210,16 @@ for source_file, table_name in SOURCES:
         .outputMode("append")
         .option("checkpointLocation", checkpoint_path)
         .trigger(availableNow=True)
-        .toTable(write_table)
+        .toTable(target_table)
     )
+
     query.awaitTermination()
+    print(f"Completed Auto Loader ingestion: {target_table}")
 
-    if is_reviews:
-        # Publish only after the staged re-ingestion has completed.
-        (
-            spark.table(REVIEW_STAGING_TABLE)
-            .write
-            .format("delta")
-            .mode("overwrite")
-            .option("overwriteSchema", "true")
-            .saveAsTable(REVIEW_TABLE)
-        )
-        print(f"Rebuilt Bronze review table: {REVIEW_TABLE}")
 
-    print(f"Completed ingestion: {write_table}")
+# ---------------------------------------------------------
+# Run the controlled review rebuild
+# ---------------------------------------------------------
+rebuild_reviews()
 
-print("All Bronze ingestion streams completed successfully.")
+print("All Bronze ingestion tasks completed successfully.")
