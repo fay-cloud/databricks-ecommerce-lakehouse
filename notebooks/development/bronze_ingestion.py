@@ -1,3 +1,20 @@
+# BRONZE LAYER LOGIC
+# - Raw data ingestion from source files
+# - Incremental file ingestion using Auto Loader
+# - Schema inference and schema evolution
+# - Schema tracking and checkpoint management
+# - Raw data preservation in Delta tables
+# - Ingestion metadata and source lineage
+# - Idempotent file processing through checkpoints
+# - Rescued data handling for unexpected schema changes
+# - Multiple source datasets ingested independently
+# - Ingestion monitoring and record count validation
+# - Duplicate file protection through Auto Loader state
+# - Business-key deduplication in Silver
+# - CDC processing and change tracking (planned)
+# - Support for replay and backfill (planned)
+
+
 from pyspark.sql import functions as F
 
 # ---------------------------------------------------------

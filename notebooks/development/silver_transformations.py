@@ -1,3 +1,17 @@
+# SILVER LAYER LOGIC
+# - Schema enforcement and schema evolution
+# - Data type casting and standardisation
+# - Required-field and business-rule validation
+# - Duplicate detection and deduplication
+# - Data quality checks and quality gates
+# - Referential integrity validation
+# - Quarantine invalid records with rejection reasons
+# - Rescued data handling
+# - Source metadata and data lineage
+# - Idempotent processing and incremental MERGE (planned)
+# - CDC processing and SCD Type 1/Type 2 (planned)
+# - Late-arriving data handling (planned)
+# - Full-refresh overwrite for the current initial implementation
 
 from pyspark.sql import functions as F
 
