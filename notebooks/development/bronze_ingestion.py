@@ -285,12 +285,6 @@ def run_bronze_ingestion():
 # ---------------------------------------------------------
 pipeline_start = datetime.now(timezone.utc)
 
-write_audit(
-    dataset_name=None,
-    status="RUNNING",
-    start_time=pipeline_start,
-    validation_status="IN_PROGRESS",
-)
 
 try:
     run_bronze_ingestion()
