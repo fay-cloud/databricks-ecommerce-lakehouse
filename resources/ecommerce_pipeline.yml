@@ -7,12 +7,14 @@ resources:
 
       tasks:
         - task_key: bronze_ingestion
+          max_retries: 1
           spark_python_task:
             python_file: ../notebooks/development/bronze_ingestion.py
             source: WORKSPACE
           environment_key: default
 
         - task_key: silver_transformations
+          max_retries: 1
           depends_on:
             - task_key: bronze_ingestion
           spark_python_task:
@@ -21,6 +23,7 @@ resources:
           environment_key: default
 
         - task_key: gold_transformations
+          max_retries: 1
           depends_on:
             - task_key: silver_transformations
           spark_python_task:
