@@ -13,7 +13,30 @@
 # - Late-arriving data handling (planned)
 # - Full-refresh overwrite for the current initial implementation
 
+from datetime import datetime, timezone
+
 from pyspark.sql import functions as F
+from pipeline_audit import log_audit_record
+
+PIPELINE_START = datetime.now(timezone.utc)
+AUDIT_TASK_NAME = "silver_transformations"
+ENVIRONMENT = "dev"
+
+
+def write_silver_audit(**kwargs):
+    """Write an audit record without masking the transformation result."""
+    try:
+        log_audit_record(
+            spark=spark,
+            task_name=AUDIT_TASK_NAME,
+            environment=ENVIRONMENT,
+            **kwargs,
+        )
+    except Exception as audit_error:
+        print(
+            "WARNING: Silver audit write failed: "
+            f"{type(audit_error).__name__}: {audit_error}"
+        )
 
 BRONZE = "de_dev.bronze"
 SILVER = "de_dev.silver"
@@ -711,15 +734,49 @@ for table_name in [
     "olist_geolocation",
     "product_category_name_translation",
 ]:
-    silver_count = spark.table(f"{SILVER}.{table_name}").count()
-    quarantine_count = spark.table(f"{QUARANTINE}.{table_name}").count()
+    # Bronze uses a shorter physical name for the category translation table.
+    source_table_name = (
+        "product_category_translation"
+        if table_name == "product_category_name_translation"
+        else table_name
+    )
+    source_table = f"{BRONZE}.{source_table_name}"
+    silver_table = f"{SILVER}.{table_name}"
+    quarantine_table = f"{QUARANTINE}.{table_name}"
+
+    source_count = spark.table(source_table).count()
+    silver_count = spark.table(silver_table).count()
+    quarantine_count = spark.table(quarantine_table).count()
+
     print(
         f"{table_name}: "
+        f"Bronze rows={source_count}, "
         f"Silver rows={silver_count}, "
         f"Quarantined rows={quarantine_count}"
     )
 
-print("Silver transformations and critical data quality gates completed.")
+    # These dataset audit records are written after all critical quality
+    # gates have passed, so validation_status reflects the completed run.
+    write_silver_audit(
+        dataset_name=table_name,
+        layer="silver",
+        status="SUCCESS",
+        start_time=PIPELINE_START,
+        source_row_count=source_count,
+        output_row_count=silver_count,
+        quarantined_row_count=quarantine_count,
+        validation_status="PASSED",
+    )
 
+# Record the overall Silver task result after all datasets and gates pass.
+write_silver_audit(
+    dataset_name=None,
+    layer="silver",
+    status="SUCCESS",
+    start_time=PIPELINE_START,
+    validation_status="PASSED",
+)
+
+print("Silver transformations and critical data quality gates completed.")
 print("All critical Silver data quality gates passed.")
 
