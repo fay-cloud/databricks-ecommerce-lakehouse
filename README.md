@@ -2,11 +2,63 @@
 
 **An end-to-end data engineering project implementing a Medallion Architecture with Apache Spark, Delta Lake, Databricks Auto Loader, Unity Catalog, and Lakeflow Jobs.**
 
-## System Design and Architecture
+### End-to-end data flow
+
+```mermaid
+flowchart LR
+    A["Olist Historical Dataset<br/>9 CSV/JSON Datasets"] --> B["Databricks Volumes<br/>Raw File Storage"]
+    B --> C["Auto Loader<br/>8 Datasets"]
+    B --> D["Validated Batch Ingestion<br/>Order Reviews"]
+
+    C --> E["Bronze Layer<br/>Raw Delta Tables"]
+    D --> E
+
+    E --> F["Silver Transformations<br/>Cleaning and Validation"]
+
+    F --> G["Silver Layer<br/>Standardised Delta Tables"]
+    F --> H["Quarantine Layer<br/>Rejected Records"]
+
+    G --> I["Gold Transformations<br/>Dimensional Modelling"]
+
+    I --> J["Gold Layer<br/>Facts and Dimensions"]
+    J --> K["Gold Daily Sales"]
+    J --> L["Databricks SQL / BI<br/>Analytics Consumers"]
+
+    M["Lakeflow Jobs"] -.-> E
+    M -.-> F
+    M -.-> I
+
+    E -.-> N["Pipeline Audit"]
+    G -.-> N
+    J -.-> N
+
+    O["GitHub Repository"] --> P["Databricks Asset Bundles"]
+    P --> M
+
+    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
+
+    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
+    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:3px,color:#7c2d12
+    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#1e293b
+    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:3px,color:#713f12
+    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:3px,color:#7f1d1d
+    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
+    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 4,color:#9a3412
+
+    class A,B source
+    class E bronze
+    class F,G silver
+    class I,J,K,L gold
+    class H quarantine
+    class M,N,O,P ops
+    class Q planned
+```
+
+**Architecture status:** The current development pipeline uses Databricks-managed volumes for raw files. ADLS Gen2 is the intended cloud landing-zone integration, but that integration is not yet implemented. The diagram distinguishes the planned integration from the existing workflow.
+
+## Architecture
 
 ![E-Commerce Lakehouse System Architecture](docs/Architecture.png)
-
-> **Project status:** Core Bronze → Silver → Gold pipeline implemented and running in Databricks development. Pipeline auditing, data-quality validation, orchestration, and daily scheduling are configured. Azure Data Lake Storage Gen2 integration and additional production-hardening capabilities remain planned.
 
 ---
 ## Project Documentation
@@ -113,59 +165,6 @@ The platform is organised into five logical areas:
 4. Consumption and analytics.
 5. Orchestration, monitoring, DevOps, and governance.
 
-### End-to-end data flow
-
-```mermaid
-flowchart LR
-    A["Olist Historical Dataset<br/>9 CSV/JSON Datasets"] --> B["Databricks Volumes<br/>Raw File Storage"]
-    B --> C["Auto Loader<br/>8 Datasets"]
-    B --> D["Validated Batch Ingestion<br/>Order Reviews"]
-
-    C --> E["Bronze Layer<br/>Raw Delta Tables"]
-    D --> E
-
-    E --> F["Silver Transformations<br/>Cleaning and Validation"]
-
-    F --> G["Silver Layer<br/>Standardised Delta Tables"]
-    F --> H["Quarantine Layer<br/>Rejected Records"]
-
-    G --> I["Gold Transformations<br/>Dimensional Modelling"]
-
-    I --> J["Gold Layer<br/>Facts and Dimensions"]
-    J --> K["Gold Daily Sales"]
-    J --> L["Databricks SQL / BI<br/>Analytics Consumers"]
-
-    M["Lakeflow Jobs"] -.-> E
-    M -.-> F
-    M -.-> I
-
-    E -.-> N["Pipeline Audit"]
-    G -.-> N
-    J -.-> N
-
-    O["GitHub Repository"] --> P["Databricks Asset Bundles"]
-    P --> M
-
-    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
-
-    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
-    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:3px,color:#7c2d12
-    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#1e293b
-    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:3px,color:#713f12
-    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:3px,color:#7f1d1d
-    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
-    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 4,color:#9a3412
-
-    class A,B source
-    class E bronze
-    class F,G silver
-    class I,J,K,L gold
-    class H quarantine
-    class M,N,O,P ops
-    class Q planned
-```
-
-**Architecture status:** The current development pipeline uses Databricks-managed volumes for raw files. ADLS Gen2 is the intended cloud landing-zone integration, but that integration is not yet implemented. The diagram distinguishes the planned integration from the existing workflow.
 
 ---
 
