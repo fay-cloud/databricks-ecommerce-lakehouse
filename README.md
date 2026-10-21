@@ -3,7 +3,8 @@
 **An end-to-end data engineering project implementing a Medallion Architecture with Apache Spark, Delta Lake, Databricks Auto Loader, Unity Catalog, and Lakeflow Jobs.**
 
 ## System Design and Architecture
-![E-Commerce Lakehouse System Architecture](docs/architecture.png)
+
+![E-Commerce Lakehouse System Architecture](docs/Architecture.png)
 
 > **Project status:** Core Bronze → Silver → Gold pipeline implemented and running in Databricks development. Pipeline auditing, data-quality validation, orchestration, and daily scheduling are configured. Azure Data Lake Storage Gen2 integration and additional production-hardening capabilities remain planned.
 
