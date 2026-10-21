@@ -4,6 +4,10 @@ resources:
     ecommerce_pipeline:
       name: ecommerce_lakehouse_${bundle.target}
       max_concurrent_runs: 1
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: "Europe/Amsterdam"
+        pause_status: UNPAUSED
 
       tasks:
         - task_key: bronze_ingestion
