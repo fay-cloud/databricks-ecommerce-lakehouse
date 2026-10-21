@@ -11,8 +11,31 @@
 # - Historical tracking and SCD-aware reporting (planned)
 # - BI and dashboard-ready data products 
  
+from datetime import datetime, timezone
+
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from pipeline_audit import log_audit_record
+
+PIPELINE_START = datetime.now(timezone.utc)
+AUDIT_TASK_NAME = "gold_transformations"
+ENVIRONMENT = "dev"
+
+
+def write_gold_audit(**kwargs):
+    """Write a Gold audit record without masking transformation results."""
+    try:
+        log_audit_record(
+            spark=spark,
+            task_name=AUDIT_TASK_NAME,
+            environment=ENVIRONMENT,
+            **kwargs,
+        )
+    except Exception as audit_error:
+        print(
+            "WARNING: Gold audit write failed: "
+            f"{type(audit_error).__name__}: {audit_error}"
+        )
 
 # ---------------------------------------------------------
 # Configuration
@@ -424,6 +447,51 @@ assert_zero_rows(
         (SELECT COUNT(*) FROM {SILVER}.olist_order_reviews)
     )
     """
+)
+
+# ---------------------------------------------------------
+# 7. Gold audit records
+# Audit records are written after all critical quality gates pass.
+# ---------------------------------------------------------
+GOLD_AUDIT_DATASETS = [
+    # dataset_name, source_table, output_table
+    ("dim_customer", f"{SILVER}.olist_customers", f"{GOLD}.dim_customer"),
+    ("dim_product", f"{SILVER}.olist_products", f"{GOLD}.dim_product"),
+    ("dim_seller", f"{SILVER}.olist_sellers", f"{GOLD}.dim_seller"),
+    ("fact_order_items", f"{SILVER}.olist_order_items", f"{GOLD}.fact_order_items"),
+    ("fact_order_payments", f"{SILVER}.olist_order_payments", f"{GOLD}.fact_order_payments"),
+    ("fact_order_reviews", f"{SILVER}.olist_order_reviews", f"{GOLD}.fact_order_reviews"),
+    # Daily sales aggregates the order-item fact. Source count is the full
+    # input fact row count; output count is the number of aggregate rows.
+    ("gold_daily_sales", f"{GOLD}.fact_order_items", f"{GOLD}.gold_daily_sales"),
+]
+
+for dataset_name, source_table, output_table in GOLD_AUDIT_DATASETS:
+    source_count = spark.table(source_table).count()
+    output_count = spark.table(output_table).count()
+
+    print(
+        f"Gold audit - {dataset_name}: "
+        f"source_rows={source_count}, output_rows={output_count}"
+    )
+
+    write_gold_audit(
+        dataset_name=dataset_name,
+        layer="gold",
+        status="SUCCESS",
+        start_time=PIPELINE_START,
+        source_row_count=source_count,
+        output_row_count=output_count,
+        quarantined_row_count=0,
+        validation_status="PASSED",
+    )
+
+write_gold_audit(
+    dataset_name=None,
+    layer="gold",
+    status="SUCCESS",
+    start_time=PIPELINE_START,
+    validation_status="PASSED",
 )
 
 print("Gold transformations and critical quality gates completed.")
