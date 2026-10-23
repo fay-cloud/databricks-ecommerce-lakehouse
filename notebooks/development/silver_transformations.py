@@ -18,9 +18,19 @@ from datetime import datetime, timezone
 from pyspark.sql import functions as F
 from pipeline_audit import log_audit_record
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--catalog", default="de_dev")
+parser.add_argument("--environment", default="dev")
+args, _ = parser.parse_known_args()
+
+CATALOG = args.catalog
+
+
 PIPELINE_START = datetime.now(timezone.utc)
 AUDIT_TASK_NAME = "silver_transformations"
-ENVIRONMENT = "dev"
+ENVIRONMENT = args.environment
 
 
 def write_silver_audit(**kwargs):
@@ -38,9 +48,9 @@ def write_silver_audit(**kwargs):
             f"{type(audit_error).__name__}: {audit_error}"
         )
 
-BRONZE = "de_dev.bronze"
+BRONZE = f"{CATALOG}.bronze"
 SILVER = f"{CATALOG}.silver"
-QUARANTINE = "de_dev.quarantine"
+QUARANTINE = f"{CATALOG}.quarantine"
 
 # Ensure target schemas exist.
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SILVER}")

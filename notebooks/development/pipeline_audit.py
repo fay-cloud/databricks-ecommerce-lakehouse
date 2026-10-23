@@ -11,7 +11,12 @@ from pyspark.sql.types import (
     LongType,
 )
 
-AUDIT_TABLE = "de_dev.monitoring.pipeline_audit"
+AUDIT_CATALOGS = {
+    "dev": "de_dev",
+    "test": "de_test",
+    "stage": "de_stage",
+    "prod": "de_prod",
+}
 
 AUDIT_SCHEMA = StructType([
     StructField("audit_id", StringType(), False),
@@ -79,11 +84,14 @@ def log_audit_record(
         end_time,
     )]
 
+    audit_catalog = AUDIT_CATALOGS.get(environment, "de_dev")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {audit_catalog}.monitoring")
+    audit_table = f"{audit_catalog}.monitoring.pipeline_audit"
     audit_df = spark.createDataFrame(record, AUDIT_SCHEMA)
 
     (
         audit_df.write
         .format("delta")
         .mode("append")
-        .saveAsTable(AUDIT_TABLE)
+        .saveAsTable(audit_table)
     )
