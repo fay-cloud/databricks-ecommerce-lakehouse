@@ -9,13 +9,17 @@ resources:
         timezone_id: "Europe/Amsterdam"
         pause_status: UNPAUSED
 
-      tasks:
-        - task_key: bronze_ingestion
-          max_retries: 1
-          spark_python_task:
-            python_file: ../notebooks/development/bronze_ingestion.py
-            source: WORKSPACE
-          environment_key: default
+      - task_key: bronze_ingestion
+  max_retries: 1
+  spark_python_task:
+    python_file: ../notebooks/development/bronze_ingestion.py
+    source: WORKSPACE
+    parameters:
+      - "--catalog"
+      - ${var.catalog}
+      - "--environment"
+      - ${bundle.target}
+  environment_key: default
 
         - task_key: silver_transformations
           max_retries: 1
@@ -24,6 +28,11 @@ resources:
           spark_python_task:
             python_file: ../notebooks/development/silver_transformations.py
             source: WORKSPACE
+            parameters:
+              - "--catalog"
+              - ${var.catalog}
+              - "--environment"
+              - ${bundle.target}
           environment_key: default
 
         - task_key: gold_transformations
@@ -33,6 +42,11 @@ resources:
           spark_python_task:
             python_file: ../notebooks/development/gold_transformations.py
             source: WORKSPACE
+            parameters:
+              - "--catalog"
+              - ${var.catalog}
+              - "--environment"
+              - ${bundle.target}
           environment_key: default
 
       environments:
