@@ -4,55 +4,68 @@
 
 ### End-to-end data flow
 
+### End-to-end data flow
+
 ```mermaid
 flowchart LR
-    A["Olist Historical Dataset<br/>9 CSV/JSON Datasets"] --> B["Databricks Volumes<br/>Raw File Storage"]
-    B --> C["Auto Loader<br/>8 Datasets"]
-    B --> D["Validated Batch Ingestion<br/>Order Reviews"]
+    A["Enterprise Data Sources<br/>SQL Server / Transactions<br/>REST APIs / SaaS / CSV / JSON"] --> B["Source Connectors<br/>JDBC / API Authentication<br/>Incremental Loads / CDC*"]
+    B --> C["Databricks Volumes<br/>Raw File Storage"]
+    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> C
 
-    C --> E["Bronze Layer<br/>Raw Delta Tables"]
-    D --> E
+    C --> D["Auto Loader<br/>8 Datasets"]
+    C --> E["Validated Batch Ingestion<br/>Order Reviews"]
 
-    E --> F["Silver Transformations<br/>Cleaning and Validation"]
+    D --> F["Bronze Layer<br/>Raw Delta Tables"]
+    E --> F
 
-    F --> G["Silver Layer<br/>Standardised Delta Tables"]
-    F --> H["Quarantine Layer<br/>Rejected Records"]
+    F --> G["Silver Transformations<br/>Cleaning / Schema Enforcement<br/>Data Quality Validation"]
 
-    G --> I["Gold Transformations<br/>Dimensional Modelling"]
+    G --> H["Silver Layer<br/>Standardised Delta Tables"]
+    G --> I["Quarantine Layer<br/>Rejected Records"]
 
-    I --> J["Gold Layer<br/>Facts and Dimensions"]
-    J --> K["Gold Daily Sales"]
-    J --> L["Databricks SQL / BI<br/>Analytics Consumers"]
+    H --> J["Gold Transformations<br/>Dimensional Modelling"]
 
-    M["Lakeflow Jobs"] -.-> E
-    M -.-> F
-    M -.-> I
+    J --> K["Gold Layer<br/>Facts and Dimensions"]
+    K --> L["Gold Daily Sales"]
+    K --> M["Databricks SQL / BI<br/>Analytics Consumers"]
 
-    E -.-> N["Pipeline Audit"]
-    G -.-> N
-    J -.-> N
+    N["Lakeflow Jobs<br/>Retries / Task Dependencies"] -.-> D
+    N -.-> G
+    N -.-> J
 
-    O["GitHub Repository"] --> P["Databricks Asset Bundles"]
-    P --> M
+    F -.-> O["Pipeline Audit<br/>Row Counts / Run Status"]
+    H -.-> O
+    K -.-> O
 
-    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
+    P["GitHub Repository"] --> R["Databricks Asset Bundles<br/>CI/CD Deployment"]
+    R --> S["DEV → TEST → STAGE → PROD"]
+    R -.-> N
 
-    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
-    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:3px,color:#7c2d12
-    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#1e293b
-    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:3px,color:#713f12
-    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:3px,color:#7f1d1d
-    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
-    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 4,color:#9a3412
+    T["Data Engineering Controls<br/>Idempotency / Checkpoints<br/>Duplicate Checks / Reconciliation"] -.-> D
+    T -.-> G
+    T -.-> J
+
+    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:2px,color:#172554
+    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:2px,color:#7c2d12
+    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#1e293b
+    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:2px,color:#713f12
+    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d
+    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:2px,stroke-dasharray:6 4,color:#9a3412
 
     class A,B source
-    class E bronze
-    class F,G silver
-    class I,J,K,L gold
-    class H quarantine
-    class M,N,O,P ops
+    class C,D,E,F bronze
+    class G,H silver
+    class I quarantine
+    class J,K,L,M gold
+    class N,O,P,R,S,T ops
     class Q planned
 ```
+
+**Architecture status:** The current Olist pipeline uses Databricks-managed Volumes for raw files, Auto Loader for eight datasets, validated batch ingestion for order reviews, and Bronze/Silver/Gold transformations with quarantine, quality checks, audit logging, and CI/CD deployment across DEV, TEST, STAGE, and PROD. SQL Server, external API/SaaS connectors, CDC, and ADLS Gen2 are intended extensions and should be marked as planned until implemented and tested.
+
+\* CDC availability depends on the source system and connector.
+
 
 **Architecture status:** The current development pipeline uses Databricks-managed volumes for raw files. ADLS Gen2 is the intended cloud landing-zone integration, but that integration is not yet implemented. The diagram distinguishes the planned integration from the existing workflow.
 
