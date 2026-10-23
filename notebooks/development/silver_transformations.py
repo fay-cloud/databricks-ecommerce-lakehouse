@@ -576,7 +576,7 @@ assert_zero_rows(
     SELECT COUNT(*)
     FROM (
         SELECT order_id
-        FROM de_dev.silver.olist_orders
+        FROM {SILVER}.olist_orders
         GROUP BY order_id
         HAVING COUNT(*) > 1
     )
