@@ -4,205 +4,55 @@
 
 ### End-to-end data flow
 
-## End-to-End Enterprise Lakehouse Architecture
-
-The platform is designed to ingest data from multiple operational and external sources, process it through an Azure Databricks Lakehouse, and publish trusted analytical datasets for reporting and downstream applications.
-
-The current implementation demonstrates the Olist e-commerce pipeline using Databricks-managed Volumes, Auto Loader, Delta tables, Medallion Architecture, data quality validation, quarantine handling, pipeline auditing, Lakeflow Jobs, and Databricks Asset Bundles across DEV, TEST, STAGE, and PROD.
-
-The architecture also identifies the intended extension to enterprise source systems, including SQL Server, transactional databases, REST APIs, SaaS platforms, and Azure Data Lake Storage Gen2 (ADLS Gen2).
-
-### Architecture diagram
-
 ```mermaid
-flowchart TB
-    subgraph SOURCES["1. Enterprise Data Sources"]
-        direction LR
-        SQL["SQL Server<br/>Transactional Databases"]
-        DB["Other Relational Databases<br/>PostgreSQL / MySQL"]
-        API["REST APIs<br/>External and Financial Data"]
-        SAAS["SaaS Applications<br/>CRM / ERP / SIX, where applicable"]
-        FILES["Files and Exports<br/>CSV / JSON / Parquet"]
-    end
+flowchart LR
+    A["Olist Historical Dataset<br/>9 CSV/JSON Datasets"] --> B["Databricks Volumes<br/>Raw File Storage"]
+    B --> C["Auto Loader<br/>8 Datasets"]
+    B --> D["Validated Batch Ingestion<br/>Order Reviews"]
 
-    subgraph INGEST["2. Ingestion and Integration"]
-        direction LR
-        DB_CONN["Database Connectors<br/>JDBC / Native Connectors"]
-        CDC["Incremental Loads / CDC<br/>Where Supported"]
-        API_CONN["API Integration<br/>OAuth / Secrets / Pagination<br/>Rate Limits / Retry Handling"]
-        FILE_CONN["File Ingestion<br/>Scheduled or Event-Driven"]
-        CONTRACT["Ingestion Controls<br/>Watermarks / Schema Checks<br/>Retries / Idempotency"]
-    end
+    C --> E["Bronze Layer<br/>Raw Delta Tables"]
+    D --> E
 
-    SQL --> DB_CONN
-    DB --> DB_CONN
-    DB_CONN --> CDC
-    API --> API_CONN
-    SAAS --> API_CONN
-    FILES --> FILE_CONN
+    E --> F["Silver Transformations<br/>Cleaning and Validation"]
 
-    DB_CONN --> CONTRACT
-    CDC --> CONTRACT
-    API_CONN --> CONTRACT
-    FILE_CONN --> CONTRACT
+    F --> G["Silver Layer<br/>Standardised Delta Tables"]
+    F --> H["Quarantine Layer<br/>Rejected Records"]
 
-    subgraph LANDING["3. Landing and Raw File Storage"]
-        direction LR
-        ADLS["Azure Data Lake Storage Gen2<br/>Cloud Landing Zone<br/>PLANNED"]
-        VOL["Databricks Volumes<br/>Current Raw File Storage"]
-        STATE["Checkpoints and Pipeline State<br/>Per-Environment Isolation"]
-    end
+    G --> I["Gold Transformations<br/>Dimensional Modelling"]
 
-    CONTRACT -. "Future cloud landing integration" .-> ADLS
-    CONTRACT --> VOL
-    ADLS -. "Connector / access integration" .-> VOL
-    VOL --> STATE
+    I --> J["Gold Layer<br/>Facts and Dimensions"]
+    J --> K["Gold Daily Sales"]
+    J --> L["Databricks SQL / BI<br/>Analytics Consumers"]
 
-    subgraph DATABRICKS["4. Azure Databricks Lakehouse"]
-        direction TB
+    M["Lakeflow Jobs"] -.-> E
+    M -.-> F
+    M -.-> I
 
-        subgraph INGESTION["Ingestion Processing"]
-            direction LR
-            AUTO["Auto Loader<br/>8 Olist Datasets"]
-            BATCH["Validated Batch Ingestion<br/>Order Reviews"]
-        end
+    E -.-> N["Pipeline Audit"]
+    G -.-> N
+    J -.-> N
 
-        subgraph BRONZE["Bronze Layer — Raw Delta"]
-            direction LR
-            RAW["Source-Aligned Tables<br/>Raw Data Preservation"]
-            META["Ingestion Metadata<br/>Source / Load Tracking"]
-        end
+    O["GitHub Repository"] --> P["Databricks Asset Bundles"]
+    P --> M
 
-        subgraph SILVER["Silver Layer — Standardised Delta"]
-            direction LR
-            CLEAN["Cleaning and Standardisation"]
-            SCHEMA["Schema Enforcement<br/>Schema Evolution Controls"]
-            QUALITY["Data Quality Gates<br/>Nulls / Duplicates / Constraints"]
-        end
+    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
 
-        subgraph CONTROL["Data Quality and Recovery"]
-            direction LR
-            QUAR["Quarantine Layer<br/>Rejected Records and Diagnostics"]
-            RECOVERY["Idempotency / Checkpoints<br/>Safe Retry and Recovery"]
-        end
+    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
+    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:3px,color:#7c2d12
+    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#1e293b
+    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:3px,color:#713f12
+    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:3px,color:#7f1d1d
+    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
+    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 4,color:#9a3412
 
-        subgraph GOLD["Gold Layer — Analytics"]
-            direction LR
-            MODEL["Dimensional Modelling<br/>Facts and Dimensions"]
-            SALES["Gold Daily Sales"]
-            MARTS["Business-Ready Data Marts"]
-        end
-
-        VOL --> AUTO
-        VOL --> BATCH
-        AUTO --> RAW
-        BATCH --> RAW
-        RAW --> META
-        RAW --> CLEAN
-        CLEAN --> SCHEMA
-        SCHEMA --> QUALITY
-        QUALITY -->|"Valid records"| MODEL
-        QUALITY -->|"Rejected records"| QUAR
-        QUAR -. "Controlled replay after correction" .-> RECOVERY
-        RECOVERY -. "Safe reprocessing" .-> CLEAN
-        MODEL --> SALES
-        MODEL --> MARTS
-    end
-
-    subgraph OPERATIONS["5. Orchestration, Governance and Observability"]
-        direction LR
-        JOBS["Lakeflow Jobs<br/>Bronze → Silver → Gold"]
-        AUDIT["Pipeline Audit<br/>Run Status / Row Counts"]
-        MON["Monitoring and Alerts<br/>Failures / Data Quality / Freshness"]
-        GOV["Unity Catalog<br/>Permissions / Lineage / Governance"]
-        SECRETS["Secrets and Access Controls<br/>Credentials / Least Privilege"]
-    end
-
-    JOBS -. "Orchestrates tasks" .-> AUTO
-    JOBS -. "Orchestrates tasks" .-> CLEAN
-    JOBS -. "Orchestrates tasks" .-> MODEL
-    META -.-> AUDIT
-    QUALITY -.-> AUDIT
-    MODEL -.-> AUDIT
-    AUDIT --> MON
-    GOV -. "Governed access and lineage" .-> RAW
-    GOV -.-> MODEL
-    SECRETS -. "Secure connector credentials" .-> INGEST
-
-    subgraph DELIVERY["6. CI/CD and Environment Promotion"]
-        direction LR
-        GIT["GitHub<br/>Version Control / Code Review"]
-        BUNDLE["Databricks Asset Bundles<br/>Validation / Deployment"]
-        DEV["DEV<br/>de_dev"]
-        TEST["TEST<br/>de_test"]
-        STAGE["STAGE<br/>de_stage"]
-        PROD["PROD<br/>de_prod"]
-        GIT --> BUNDLE
-        BUNDLE --> DEV --> TEST --> STAGE --> PROD
-    end
-
-    BUNDLE -. "Deploy jobs and code" .-> JOBS
-    DEV -. "Environment-specific configuration" .-> DATABRICKS
-    PROD -. "Production execution" .-> DATABRICKS
-
-    subgraph CONSUMERS["7. Analytics and Downstream Consumers"]
-        direction LR
-        SQLWH["Databricks SQL"]
-        BI["Power BI / BI Dashboards"]
-        ML["Data Science / ML"]
-        DOWN["Downstream APIs / Applications"]
-    end
-
-    SALES --> SQLWH
-    MARTS --> SQLWH
-    SQLWH --> BI
-    MARTS --> ML
-    MARTS --> DOWN
-
-    classDef source fill:#eaf2ff,stroke:#1d4ed8,color:#172554
-    classDef ingestion fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
-    classDef bronze fill:#fff0dc,stroke:#c46a12,color:#7c2d12
-    classDef silver fill:#f1f5f9,stroke:#64748b,color:#1e293b
-    classDef gold fill:#fff6c7,stroke:#b8860b,color:#713f12
-    classDef quarantine fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
-    classDef ops fill:#dcfce7,stroke:#15803d,color:#14532d
-    classDef consumer fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
-    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-dasharray:5 5,color:#9a3412
-
-    class SQL,DB,API,SAAS,FILES source
-    class DB_CONN,CDC,API_CONN,FILE_CONN,CONTRACT ingestion
-    class AUTO,BATCH,STATE ingestion
-    class RAW,META bronze
-    class CLEAN,SCHEMA,QUALITY silver
-    class MODEL,SALES,MARTS gold
-    class QUAR,RECOVERY quarantine
-    class JOBS,AUDIT,MON,GOV,SECRETS,GIT,BUNDLE,DEV,TEST,STAGE,PROD ops
-    class SQLWH,BI,ML,DOWN consumer
-    class ADLS planned
+    class A,B source
+    class E bronze
+    class F,G silver
+    class I,J,K,L gold
+    class H quarantine
+    class M,N,O,P ops
+    class Q planned
 ```
-
-### Engineering practices
-
-| Area | Practice |
-|---|---|
-| Ingestion | Use appropriate database, API, or file connectors; support incremental extraction and CDC where available. |
-| Reliability | Use idempotent writes, checkpoints, watermarks, retry policies, and controlled reprocessing. |
-| Data quality | Enforce schemas, validate required fields, check duplicates and referential integrity, and quarantine invalid records. |
-| Transformation | Use Bronze for raw ingestion, Silver for standardisation and validation, and Gold for analytical models. |
-| Governance | Apply Unity Catalog permissions, data lineage, appropriate credential management, and least-privilege access. |
-| Orchestration | Use Lakeflow Jobs to manage task dependencies, retries, concurrency, and execution order. |
-| Observability | Record audit metrics, row counts, execution status, failures, data freshness, and quality results. |
-| CI/CD | Use GitHub and Databricks Asset Bundles to validate and deploy code and job definitions across isolated environments. |
-| Consumption | Expose curated Gold datasets to Databricks SQL, BI dashboards, and downstream analytical workloads. |
-
-### Implementation status
-
-- **Implemented:** Olist raw-file ingestion, Databricks Volumes, Auto Loader for eight datasets, validated batch ingestion for order reviews, Bronze/Silver/Gold transformations, quarantine, quality gates, audit logging, Lakeflow Jobs, and deployment targets for DEV, TEST, STAGE, and PROD.
-- **Target architecture:** SQL Server and other database integrations, external API/SaaS connectors, CDC, and ADLS Gen2 as a cloud landing zone.
-- **Production hardening:** Confirm environment-specific permissions, secret management, alert delivery, monitoring coverage, recovery procedures, and production scheduling before treating these controls as fully operational.
-
-**Architecture principle:** Every source should use an appropriate connector and ingestion strategy, while the Lakehouse provides a consistent, governed, testable, and auditable path from raw data to trusted analytics.
-
 
 **Architecture status:** The current development pipeline uses Databricks-managed volumes for raw files. ADLS Gen2 is the intended cloud landing-zone integration, but that integration is not yet implemented. The diagram distinguishes the planned integration from the existing workflow.
 
