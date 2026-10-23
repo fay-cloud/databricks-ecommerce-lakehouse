@@ -19,7 +19,15 @@ from pipeline_audit import log_audit_record
 
 PIPELINE_START = datetime.now(timezone.utc)
 AUDIT_TASK_NAME = "gold_transformations"
-ENVIRONMENT = "dev"
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--catalog", default="de_dev")
+parser.add_argument("--environment", default="dev")
+args, _ = parser.parse_known_args()
+
+CATALOG = args.catalog
+ENVIRONMENT = args.environment
 
 
 def write_gold_audit(**kwargs):
@@ -40,8 +48,8 @@ def write_gold_audit(**kwargs):
 # ---------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------
-SILVER = "de_dev.silver"
-GOLD = "de_dev.gold"
+SILVER = f"{CATALOG}.silver"
+GOLD = f"{CATALOG}.gold"
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {GOLD}")
 
