@@ -39,7 +39,7 @@ def write_silver_audit(**kwargs):
         )
 
 BRONZE = "de_dev.bronze"
-SILVER = "de_dev.silver"
+SILVER = f"{CATALOG}.silver"
 QUARANTINE = "de_dev.quarantine"
 
 # Ensure target schemas exist.
@@ -572,7 +572,7 @@ def assert_zero_rows(check_name, query):
 # 1. Primary key uniqueness
 assert_zero_rows(
     "duplicate_order_ids",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT order_id
@@ -585,11 +585,11 @@ assert_zero_rows(
 
 assert_zero_rows(
     "duplicate_customer_ids",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT customer_id
-        FROM de_dev.silver.olist_customers
+        FROM {SILVER}.olist_customers
         GROUP BY customer_id
         HAVING COUNT(*) > 1
     )
@@ -598,11 +598,11 @@ assert_zero_rows(
 
 assert_zero_rows(
     "duplicate_product_ids",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT product_id
-        FROM de_dev.silver.olist_products
+        FROM {SILVER}.olist_products
         GROUP BY product_id
         HAVING COUNT(*) > 1
     )
@@ -611,11 +611,11 @@ assert_zero_rows(
 
 assert_zero_rows(
     "duplicate_seller_ids",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT seller_id
-        FROM de_dev.silver.olist_sellers
+        FROM {SILVER}.olist_sellers
         GROUP BY seller_id
         HAVING COUNT(*) > 1
     )
@@ -624,11 +624,11 @@ assert_zero_rows(
 
 assert_zero_rows(
     "duplicate_order_item_keys",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT order_id, order_item_id
-        FROM de_dev.silver.olist_order_items
+        FROM {SILVER}.olist_order_items
         GROUP BY order_id, order_item_id
         HAVING COUNT(*) > 1
     )
@@ -638,40 +638,40 @@ assert_zero_rows(
 # 2. Referential integrity
 assert_zero_rows(
     "orders_without_customer",
-    """
+    f"""
     SELECT COUNT(*)
-    FROM de_dev.silver.olist_orders o
-    LEFT ANTI JOIN de_dev.silver.olist_customers c
+    FROM {SILVER}.olist_orders o
+    LEFT ANTI JOIN {SILVER}.olist_customers c
       ON o.customer_id = c.customer_id
     """
 )
 
 assert_zero_rows(
     "order_items_without_order",
-    """
+    f"""
     SELECT COUNT(*)
-    FROM de_dev.silver.olist_order_items i
-    LEFT ANTI JOIN de_dev.silver.olist_orders o
+    FROM {SILVER}.olist_order_items i
+    LEFT ANTI JOIN {SILVER}.olist_orders o
       ON i.order_id = o.order_id
     """
 )
 
 assert_zero_rows(
     "order_items_without_product",
-    """
+    f"""
     SELECT COUNT(*)
-    FROM de_dev.silver.olist_order_items i
-    LEFT ANTI JOIN de_dev.silver.olist_products p
+    FROM {SILVER}.olist_order_items i
+    LEFT ANTI JOIN {SILVER}.olist_products p
       ON i.product_id = p.product_id
     """
 )
 
 assert_zero_rows(
     "order_items_without_seller",
-    """
+    f"""
     SELECT COUNT(*)
-    FROM de_dev.silver.olist_order_items i
-    LEFT ANTI JOIN de_dev.silver.olist_sellers s
+    FROM {SILVER}.olist_order_items i
+    LEFT ANTI JOIN {SILVER}.olist_sellers s
       ON i.seller_id = s.seller_id
     """
 )
@@ -680,11 +680,11 @@ assert_zero_rows(
 # 3. Payment key uniqueness and referential integrity
 assert_zero_rows(
     "duplicate_payment_keys",
-    """
+    f"""
     SELECT COUNT(*)
     FROM (
         SELECT order_id, payment_sequential
-        FROM de_dev.silver.olist_order_payments
+        FROM {SILVER}.olist_order_payments
         GROUP BY order_id, payment_sequential
         HAVING COUNT(*) > 1
     )
@@ -693,10 +693,10 @@ assert_zero_rows(
 
 assert_zero_rows(
     "payments_without_order",
-    """
+    f"""
     SELECT COUNT(*)
-    FROM de_dev.silver.olist_order_payments p
-    LEFT ANTI JOIN de_dev.silver.olist_orders o
+    FROM {SILVER}.olist_order_payments p
+    LEFT ANTI JOIN {SILVER}.olist_orders o
       ON p.order_id = o.order_id
     """
 )
@@ -706,11 +706,11 @@ assert_zero_rows(
 
 # Review IDs may repeat across different orders in the current source.
 # Monitor duplicate IDs without failing the entire pipeline.
-duplicate_review_count = spark.sql("""
+duplicate_review_count = spark.sql(f"""
     SELECT COUNT(*)
     FROM (
         SELECT review_id
-        FROM de_dev.silver.olist_order_reviews
+        FROM {SILVER}.olist_order_reviews
         GROUP BY review_id
         HAVING COUNT(*) > 1
     )

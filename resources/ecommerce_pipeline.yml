@@ -1,4 +1,3 @@
-
 resources:
   jobs:
     ecommerce_pipeline:
@@ -7,19 +6,20 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"
         timezone_id: "Europe/Amsterdam"
-        pause_status: UNPAUSED
+        pause_status: PAUSED
 
-      - task_key: bronze_ingestion
-  max_retries: 1
-  spark_python_task:
-    python_file: ../notebooks/development/bronze_ingestion.py
-    source: WORKSPACE
-    parameters:
-      - "--catalog"
-      - ${var.catalog}
-      - "--environment"
-      - ${bundle.target}
-  environment_key: default
+      tasks:
+        - task_key: bronze_ingestion
+          max_retries: 1
+          spark_python_task:
+            python_file: ../notebooks/development/bronze_ingestion.py
+            source: WORKSPACE
+            parameters:
+              - "--catalog"
+              - ${var.catalog}
+              - "--environment"
+              - ${bundle.target}
+          environment_key: default
 
         - task_key: silver_transformations
           max_retries: 1
