@@ -4,8 +4,6 @@
 
 ### End-to-end data flow
 
-### End-to-end data flow
-
 ```mermaid
 flowchart LR
     A["Enterprise Data Sources<br/>SQL Server / Transactions<br/>REST APIs / SaaS / CSV / JSON"] --> B["Source Connectors<br/>JDBC / API Authentication<br/>Incremental Loads / CDC*"]
