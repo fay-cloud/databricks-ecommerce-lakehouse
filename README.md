@@ -1,197 +1,179 @@
 # Production-Grade E-Commerce Lakehouse on Azure Databricks
 
-**An end-to-end data engineering project implementing a Medallion Architecture with Apache Spark, Delta Lake, Databricks Auto Loader, Unity Catalog, and Lakeflow Jobs.**
+**An end-to-end data engineering project demonstrating Medallion Architecture with Apache Spark, Delta Lake, Databricks Auto Loader, Unity Catalog, Lakeflow Jobs, data-quality controls, audit logging, and Databricks Asset Bundles.**
 
-### End-to-end data flow
+## End-to-end data flow
 
 
 ```mermaid
 flowchart LR
-    A["Olist Historical Dataset<br/>9 CSV/JSON Datasets"] --> B["Databricks Volumes<br/>Raw File Storage"]
+    A["Data Sources<br/>Olist: 9 Historical Datasets<br/>Future: SQL / APIs / SaaS"] --> B["Ingestion and Storage<br/>Databricks Volumes<br/>External Connectors Planned"]
     B --> C["Auto Loader<br/>8 Datasets"]
     B --> D["Validated Batch Ingestion<br/>Order Reviews"]
 
     C --> E["Bronze Layer<br/>Raw Delta Tables"]
     D --> E
 
-    E --> F["Silver Transformations<br/>Cleaning and Validation"]
-
+    E --> F["Silver Transformations<br/>Cleaning / Schema Validation<br/>Data Quality Gates"]
     F --> G["Silver Layer<br/>Standardised Delta Tables"]
     F --> H["Quarantine Layer<br/>Rejected Records"]
 
-    G --> I["Gold Transformations<br/>Dimensional Modelling"]
-
+    G --> I["Gold Transformations<br/>Dimensional Modelling<br/>Uniqueness / Reconciliation"]
     I --> J["Gold Layer<br/>Facts and Dimensions"]
     J --> K["Gold Daily Sales"]
     J --> L["Databricks SQL / BI<br/>Analytics Consumers"]
 
-    M["Lakeflow Jobs"] -.-> E
+    M["Lakeflow Jobs<br/>Dependencies / Retries<br/>Max Concurrent Runs: 1"] -.-> E
     M -.-> F
     M -.-> I
 
-    E -.-> N["Pipeline Audit"]
+    E -.-> N["Pipeline Audit<br/>Status / Row Counts<br/>Validation Results"]
     G -.-> N
     J -.-> N
 
-    O["GitHub Repository"] --> P["Databricks Asset Bundles"]
-    P --> M
+    O["GitHub Repository"] --> P["Databricks Asset Bundles<br/>Validate / Deploy"]
+    P --> Q["DEV → TEST → STAGE → PROD"]
+    P -.-> M
 
-    Q["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
+    R["Reliability Controls<br/>Checkpoints / Repeatable Writes<br/>Quality Gates / Safe Reruns"] -.-> C
+    R -.-> F
+    R -.-> I
 
-    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
-    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:3px,color:#7c2d12
-    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:3px,color:#1e293b
-    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:3px,color:#713f12
-    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:3px,color:#7f1d1d
-    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
-    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 4,color:#9a3412
+    S["Azure Data Lake Storage Gen2<br/>PLANNED"] -.-> B
+
+    classDef source fill:#eaf2ff,stroke:#1d4ed8,stroke-width:2px,color:#172554
+    classDef bronze fill:#fff0dc,stroke:#c46a12,stroke-width:2px,color:#7c2d12
+    classDef silver fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#1e293b
+    classDef gold fill:#fff6c7,stroke:#b8860b,stroke-width:2px,color:#713f12
+    classDef quarantine fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef ops fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d
+    classDef planned fill:#fff7ed,stroke:#ea580c,stroke-width:2px,stroke-dasharray:6 4,color:#9a3412
 
     class A,B source
-    class E bronze
+    class C,D,E bronze
     class F,G silver
-    class I,J,K,L gold
     class H quarantine
-    class M,N,O,P ops
-    class Q planned
+    class I,J,K,L gold
+    class M,N,O,P,Q,R ops
+    class S planned
 ```
 
-**Architecture status:** The current development pipeline uses Databricks-managed volumes for raw files. ADLS Gen2 is the intended cloud landing-zone integration, but that integration is not yet implemented. The diagram distinguishes the planned integration from the existing workflow.
+**Architecture status:** The implemented pipeline processes the nine historical Olist datasets using Databricks-managed Volumes, Auto Loader for eight datasets, and validated batch ingestion for order reviews. It includes Bronze/Silver/Gold transformations, quarantine handling, quality gates, audit logging, Lakeflow Jobs, and Databricks Asset Bundle targets for DEV, TEST, STAGE, and PROD. External SQL/API/SaaS connectors and ADLS Gen2 remain planned extensions. Full recovery from every partial-failure scenario has not been independently verified.
 
-## Architecture
+## Project documentation
 
-![E-Commerce Lakehouse System Architecture](docs/Architecture.png)
+For detailed design decisions and implementation notes, see [Project Technical Documentation](docs/PROJECT_DOCUMENTATION.md).
 
----
-## Project Documentation
-
-For a detailed explanation of the system architecture, data flow, Medallion layers, data modelling, data quality, orchestration, monitoring, and deployment, see the full technical documentation.
-
-📘 **[Read the Project Technical Documentation](docs/PROJECT_DOCUMENTATION.md)**
-
-## Table of Contents
+## Table of contents
 
 - [Overview](#overview)
-- [Business Problem](#business-problem)
-- [Project Objectives](#project-objectives)
-- [System Design and Architecture](#system-design-and-architecture)
-- [Technology Stack](#technology-stack)
-- [Data Sources](#data-sources)
-- [Medallion Architecture](#medallion-architecture)
-- [Data Modelling](#data-modelling)
-- [Data Quality and Reliability](#data-quality-and-reliability)
-- [Pipeline Orchestration](#pipeline-orchestration)
-- [Monitoring and Audit Framework](#monitoring-and-audit-framework)
-- [Repository Structure](#repository-structure)
-- [Environment and Deployment](#environment-and-deployment)
-- [Validation and Testing](#validation-and-testing)
-- [Implementation Status](#implementation-status)
-- [Future Enhancements](#future-enhancements)
-- [Getting Started](#getting-started)
+- [Business problem](#business-problem)
+- [Project objectives](#project-objectives)
+- [System design](#system-design)
+- [Technology stack](#technology-stack)
+- [Data sources](#data-sources)
+- [Medallion architecture](#medallion-architecture)
+- [Data modelling](#data-modelling)
+- [Data quality and reliability](#data-quality-and-reliability)
+- [Pipeline orchestration](#pipeline-orchestration)
+- [Monitoring and audit](#monitoring-and-audit)
+- [Repository structure](#repository-structure)
+- [Environment and deployment](#environment-and-deployment)
+- [Validation and testing](#validation-and-testing)
+- [Implementation status](#implementation-status)
+- [Future enhancements](#future-enhancements)
+- [Getting started](#getting-started)
 - [Author](#author)
 
 ---
 
 ## Overview
 
-This project demonstrates the design and implementation of a production-oriented e-commerce lakehouse using Azure Databricks and Delta Lake.
+This project demonstrates an e-commerce Lakehouse built with Azure Databricks and Delta Lake. It ingests historical source files, preserves raw data, applies cleansing and business validation, quarantines rejected records, and publishes analytical tables for reporting.
 
-The platform ingests historical e-commerce data, preserves source information, applies data-quality and business validation, transforms records into analytical datasets, and produces business-ready tables for reporting and analysis.
+The project uses the Brazilian Olist e-commerce dataset, which contains customer, order, product, seller, payment, review, geographic, and product-category information.
 
-The architecture follows the **Medallion Architecture**:
+The architecture follows the Medallion pattern:
 
-- **Bronze:** Raw source ingestion and preservation.
-- **Silver:** Data cleansing, standardisation, validation, and quarantine.
-- **Gold:** Dimensional modelling, analytical facts, and business aggregations.
+- **Bronze:** source-aligned ingestion into Delta tables.
+- **Silver:** cleansing, standardisation, validation, and quarantine.
+- **Gold:** dimensional models and business-level aggregations.
 
-Databricks Lakeflow Jobs orchestrates the pipeline, while a central audit table records execution status, row counts, validation results, and execution duration.
-
-The project uses the Brazilian Olist e-commerce dataset to model a realistic data engineering workflow involving customers, orders, products, sellers, payments, reviews, and delivery performance.
+Lakeflow Jobs orchestrates the Bronze → Silver → Gold workflow. A Delta audit table records execution and dataset-level metrics. GitHub and Databricks Asset Bundles provide source control and job deployment configuration.
 
 ### Key capabilities
 
-- Incremental file discovery using Databricks Auto Loader for eight datasets.
-- Specialised batch ingestion and validation for multiline review CSV data.
-- Delta Lake tables across Bronze, Silver, and Gold layers.
-- Data-quality validation, quarantine handling, and referential-integrity checks.
-- Dimensional modelling and separate fact tables for order items, payments, and reviews.
-- Daily sales aggregation and delivery-performance metrics.
-- Pipeline audit logging and validation status tracking.
-- Lakeflow Job orchestration with task dependencies and retry configuration.
-- Git-based version control and Databricks Asset Bundle deployment.
+- Auto Loader ingestion for eight datasets.
+- Dedicated batch ingestion and validation for multiline review CSV data.
+- Delta tables across Bronze, Silver, and Gold.
+- Schema, business-key, and referential-integrity checks.
+- Quarantine handling for rejected records.
+- Separate fact tables for order items, payments, and reviews.
+- Daily sales aggregation and delivery-related metrics.
+- Pipeline audit logging with row counts and validation status.
+- Lakeflow Jobs with task dependencies, retries, and concurrency control.
+- Bundle targets for DEV, TEST, STAGE, and PROD.
 
----
+## Business problem
 
-## Business Problem
+E-commerce systems produce data across customers, orders, products, sellers, payments, reviews, and logistics. Without a structured platform, inconsistent schemas, incomplete records, duplicate keys, and incorrect joins can reduce the reliability of business reporting.
 
-E-commerce platforms generate data across multiple business domains, including customers, orders, products, sellers, payments, reviews, and logistics.
+This project creates a repeatable pipeline that turns raw datasets into validated analytical tables while retaining traceability and visibility into data-quality issues.
 
-Without a structured data platform, these datasets can contain inconsistent schemas, incomplete records, duplicate keys, inconsistent business definitions, and relationships that are difficult to reconcile.
-
-These issues affect reporting accuracy, operational visibility, and the reliability of downstream analytics.
-
-This project addresses these challenges by building a structured lakehouse pipeline that transforms raw source datasets into validated, traceable, analytical data products.
-
-The resulting platform supports questions such as:
+The resulting models can support questions such as:
 
 - How do order volumes and sales values change over time?
 - Which payment methods contribute the most payment value?
 - How do delivery outcomes vary across orders?
-- How are customer, product, and seller records represented in analytical models?
-- Can data-quality issues be identified and traced through the pipeline?
+- How are customers, products, and sellers represented in analytical models?
+- Where do data-quality issues occur, and how can they be investigated?
 
----
+## Project objectives
 
-## Project Objectives
-
-1. Build a repeatable end-to-end data ingestion and transformation pipeline.
+1. Build a repeatable end-to-end ingestion and transformation pipeline.
 2. Implement Bronze, Silver, Gold, and Quarantine layers.
 3. Apply schema validation, business rules, and data-quality gates.
 4. Preserve traceability from source data through analytical outputs.
-5. Build fact and dimension tables suitable for business intelligence.
-6. Prevent incorrect joins from multiplying payment or order-item values.
-7. Orchestrate dependent tasks using Databricks Lakeflow Jobs.
-8. Record pipeline execution and validation results centrally.
-9. Manage deployment configuration through Git and Databricks Asset Bundles.
-10. Establish a foundation for incremental processing, recovery testing, and cloud production deployment.
+5. Build fact and dimension tables for business intelligence.
+6. Prevent joins across different transaction grains from multiplying monetary values.
+7. Orchestrate dependent tasks with Lakeflow Jobs.
+8. Record execution and validation results centrally.
+9. Manage job deployment configuration through Git and Databricks Asset Bundles.
+10. Establish a foundation for incremental processing, recovery testing, and cloud-storage integration.
 
----
+## System design
 
-## System Design and Architecture
+The platform has five logical areas:
 
-The platform is organised into five logical areas:
+1. **Sources:** the historical Olist CSV datasets.
+2. **Ingestion and storage:** Databricks Volumes, Auto Loader, and a specialised review-ingestion path.
+3. **Lakehouse processing:** Bronze, Silver, Gold, and Quarantine tables.
+4. **Consumption:** curated fact tables, dimensions, and daily sales aggregates.
+5. **Operations and delivery:** Lakeflow Jobs, audit logging, Unity Catalog, GitHub, and Databricks Asset Bundles.
 
-1. Data sources.
-2. Ingestion and storage.
-3. Databricks lakehouse processing.
-4. Consumption and analytics.
-5. Orchestration, monitoring, DevOps, and governance.
+External databases, REST APIs, SaaS sources, and ADLS Gen2 are possible extensions, not part of the currently implemented Olist ingestion path.
 
+## Technology stack
 
----
-
-## Technology Stack
-
-| Category | Technologies | Purpose |
+| Category | Technology | Purpose |
 |---|---|---|
-| Processing | Python, Apache Spark, PySpark | Distributed ingestion and transformations |
-| Lakehouse | Azure Databricks, Delta Lake | Data processing and transactional tables |
+| Processing | Python, Apache Spark, PySpark | Data ingestion and transformation |
+| Lakehouse | Azure Databricks, Delta Lake | Processing and transactional tables |
 | File ingestion | Databricks Auto Loader | Incremental file discovery and checkpointing |
-| Data architecture | Medallion Architecture | Separation of raw, cleansed, and analytical data |
-| Data modelling | Dimensional modelling, fact and dimension tables | Business-ready analytical structures |
-| Orchestration | Databricks Lakeflow Jobs | Task dependencies, scheduling, and retries |
+| Architecture | Medallion Architecture | Separation of raw, cleansed, and analytical data |
+| Data modelling | Fact and dimension tables | Business-ready analytical structures |
+| Orchestration | Databricks Lakeflow Jobs | Dependencies, retries, and scheduling |
 | Governance | Unity Catalog | Data organisation, access control, and metadata |
 | Monitoring | Delta audit table, SQL validation queries | Execution tracking and data-quality visibility |
 | Version control | Git, GitHub | Source control and change management |
-| Deployment | Databricks Asset Bundles | Configuration validation and workspace deployment |
-| Future infrastructure | Azure Data Lake Storage Gen2, Terraform | Cloud storage and infrastructure automation |
+| Deployment | Databricks Asset Bundles | Bundle validation and workspace deployment |
+| Planned infrastructure | ADLS Gen2, Terraform | Cloud storage and infrastructure automation |
 
----
+## Data sources
 
-## Data Sources
+The project uses nine historical Olist datasets:
 
-The project uses the Olist Brazilian e-commerce dataset, consisting of nine source datasets.
-
-| Source dataset | Business domain |
+| Dataset | Business domain |
 |---|---|
 | `olist_customers_dataset.csv` | Customer records |
 | `olist_geolocation_dataset.csv` | Geographic information |
@@ -201,33 +183,31 @@ The project uses the Olist Brazilian e-commerce dataset, consisting of nine sour
 | `olist_orders_dataset.csv` | Order lifecycle and timestamps |
 | `olist_products_dataset.csv` | Product attributes |
 | `olist_sellers_dataset.csv` | Seller records |
-| `product_category_name_translation.csv` | Product category translations |
+| `product_category_name_translation.csv` | Product-category translations |
 
-These datasets are historical files, not a live CDC stream. The current implementation uses Auto Loader for eight datasets and a validated batch rebuild for order reviews because multiline CSV comments require special handling.
+These are historical files, not a live change-data-capture stream. The current implementation uses Auto Loader for eight datasets and a validated batch rebuild for order reviews because review comments can contain multiline CSV data.
 
----
+Future source integrations could include SQL Server or other relational databases, REST APIs, and SaaS platforms. Each would require an appropriate, configured, secured, and tested connector. CDC should only be claimed where supported and implemented for the selected source.
 
-## Medallion Architecture
+## Medallion architecture
 
-### 1. Bronze Layer: Raw Ingestion
+### 1. Bronze — raw ingestion
 
-**Schema:** `de_dev.bronze`
+**Development schema:** `de_dev.bronze`
 
-The Bronze layer preserves ingested source data in Delta tables and retains relevant ingestion metadata.
+Bronze preserves source-aligned data in Delta tables and retains relevant ingestion metadata.
 
 Implemented capabilities include:
 
-- Auto Loader ingestion for eight datasets.
+- Auto Loader for eight datasets.
 - Stable checkpoint paths for file-processing state.
 - Available-now ingestion execution.
-- Source file and ingestion metadata where configured.
-- Rescued data handling where configured.
+- Source-file and ingestion metadata where configured.
+- Rescued-data handling where configured.
 - Dedicated review staging, validation, and publishing logic.
-- Validation of the review dataset before replacing its published Bronze table.
+- Review validation before replacing the published Bronze table.
 
-The review ingestion validates the expected 99,224 records and checks the composite review key `(review_id, order_id)` before publishing the dataset.
-
-The Bronze layer contains nine tables:
+The nine Bronze tables are:
 
 - `olist_customers`
 - `olist_geolocation`
@@ -239,11 +219,13 @@ The Bronze layer contains nine tables:
 - `olist_sellers`
 - `product_category_translation`
 
-### 2. Silver Layer: Cleansing and Standardisation
+The review-ingestion workflow validates the expected 99,224 records and checks the composite key `(review_id, order_id)` before publishing.
 
-**Schema:** `de_dev.silver`
+### 2. Silver — cleansing and standardisation
 
-The Silver layer applies standardisation, validation, and business rules before data is consumed by the Gold transformations.
+**Development schema:** `de_dev.silver`
+
+Silver applies standardisation, validation, and business rules before downstream Gold processing.
 
 Implemented capabilities include:
 
@@ -254,9 +236,9 @@ Implemented capabilities include:
 - Quality gates before downstream processing.
 - Full-refresh table writes.
 
-The current transformation process rebuilds Silver tables using overwrite operations. Incremental merge processing for changed or late-arriving records remains a future enhancement.
+The current Silver process rebuilds tables using overwrite operations. Incremental `MERGE` processing for changed or late-arriving records is a future enhancement.
 
-Previously verified Silver output counts include:
+Previously verified development row counts:
 
 | Dataset | Rows |
 |---|---:|
@@ -270,23 +252,21 @@ Previously verified Silver output counts include:
 | Geolocation | 1,000,163 |
 | Category translations | 71 |
 
-These counts represent previously verified development results and should not be interpreted as a guarantee that every future run will have identical counts if source data changes.
+These are historical validation results, not a guarantee that future runs will have identical counts if source data or processing logic changes.
 
-### 3. Quarantine Layer: Rejected Records
+### 3. Quarantine — rejected records
 
-**Schema:** `de_dev.quarantine`
+**Development schema:** `de_dev.quarantine`
 
-The Quarantine layer stores records rejected by applicable validation rules.
+Quarantine stores records rejected by applicable validation rules so they can be investigated without silently mixing invalid records into trusted analytical outputs.
 
-It supports investigation of invalid data and preserves visibility into data-quality issues.
+The current implementation includes quarantine handling in Silver transformations. Automatic replay of corrected records and a complete operational remediation workflow remain future enhancements.
 
-The current implementation includes quarantine handling in the Silver transformations. Automatic reprocessing of corrected records and a complete operational remediation workflow remain future enhancements.
+### 4. Gold — business-ready data
 
-### 4. Gold Layer: Business-Ready Data
+**Development schema:** `de_dev.gold`
 
-**Schema:** `de_dev.gold`
-
-The Gold layer provides dimensional and analytical tables for reporting and downstream consumption.
+Gold contains dimensional and analytical tables for reporting and downstream consumption.
 
 #### Dimensions
 
@@ -304,65 +284,53 @@ The Gold layer provides dimensional and analytical tables for reporting and down
 | `fact_order_payments` | One record per `(order_id, payment_sequential)` |
 | `fact_order_reviews` | One record per source review record, with a generated review-row key |
 
-#### Aggregated table
+#### Aggregation
 
 | Table | Description |
 |---|---|
 | `gold_daily_sales` | Daily sales metrics grouped by purchase date and order status |
 
-The order-item and payment facts are maintained separately to prevent joins between multiple items and multiple payments from multiplying monetary values.
+Order-item and payment facts are maintained separately to prevent joins between multiple items and multiple payments from multiplying monetary values.
 
-The Gold transformation process includes uniqueness checks and row-count reconciliation against Silver source datasets.
+Gold transformations include uniqueness checks and row-count reconciliation against Silver source datasets. Current Gold writes use full-refresh overwrites; incremental `MERGE` operations are not yet implemented.
 
-The current Gold transformations use full-refresh overwrites. Incremental MERGE operations are not represented as an implemented capability.
+Previously verified Gold row counts:
 
----
+| Gold table | Rows |
+|---|---:|
+| `dim_customer` | 99,441 |
+| `dim_product` | 32,951 |
+| `dim_seller` | 3,095 |
+| `fact_order_items` | 112,650 |
+| `fact_order_payments` | 103,886 |
+| `fact_order_reviews` | 99,224 |
+| `gold_daily_sales` | 1,783 |
 
-## Data Modelling
+## Data modelling
 
 The analytical model separates transaction grains to preserve correct aggregation behaviour.
 
 ### Order items
 
-The order-item fact uses the composite key:
-
-`(order_id, order_item_id)`
-
-It includes order context, product and seller relationships, pricing, freight, and delivery-related metrics.
+The order-item fact uses `(order_id, order_item_id)` as its composite key. It includes order context, product and seller relationships, pricing, freight, and delivery-related metrics.
 
 ### Payments
 
-The payment fact uses:
-
-`(order_id, payment_sequential)`
-
-This permits multiple payment records per order without collapsing distinct payment sequences.
+The payment fact uses `(order_id, payment_sequential)`. This allows multiple payment records per order to remain distinct.
 
 ### Reviews
 
-The review fact preserves source review records. The composite source key `(review_id, order_id)` is important because a review ID may occur across different orders in the source data.
+The review fact preserves source review records. The composite source key `(review_id, order_id)` is important because a review ID can occur across different orders in the source data.
 
 ### Daily sales
 
-The `gold_daily_sales` table aggregates order-item data by purchase date and order status.
+`gold_daily_sales` aggregates order-item data by purchase date and order status. Measures include order counts, item counts, product revenue, freight value, item-plus-freight value, average item price, and an average late-delivery indicator.
 
-It includes measures such as:
+The aggregate has fewer rows than the order-item fact because it represents grouped data rather than individual items.
 
-- Order counts.
-- Item counts.
-- Product revenue.
-- Freight value.
-- Item-plus-freight value.
-- Average item price.
-- Average late-delivery indicator.
+## Data quality and reliability
 
-The aggregate table's row count is expected to differ from its source fact table because it represents grouped data rather than individual order items.
-
----
-
-## Data Quality and Reliability
-
-The pipeline uses validation rules and quality gates to catch inconsistencies before data reaches the Gold layer.
+The pipeline uses validation rules and quality gates to catch inconsistencies before data reaches Gold.
 
 ### Implemented validation
 
@@ -374,9 +342,7 @@ The pipeline uses validation rules and quality gates to catch inconsistencies be
 - Source-to-output row-count reconciliation.
 - Payment and order-item fact-grain validation.
 
-### Payment data example
-
-A previously verified Gold payment fact contained:
+A previously verified payment fact contained:
 
 | Metric | Result |
 |---|---:|
@@ -386,36 +352,25 @@ A previously verified Gold payment fact contained:
 | Zero-value payment records | 9 |
 | Undefined payment types | 3 |
 
-The zero-value and undefined payment records were retained for investigation rather than automatically deleted. These findings demonstrate why data-quality anomalies should be distinguished from pipeline failures.
+Zero-value and undefined payment records were retained for investigation rather than automatically deleted. Data anomalies should be distinguished from pipeline failures.
 
 ### Idempotency and recovery
 
-The implementation includes Auto Loader checkpoints, repeatable full-refresh Silver and Gold writes, business-key checks, and a review staging-and-validation workflow.
+The implementation uses Auto Loader checkpoints, repeatable full-refresh Silver and Gold writes, business-key checks, and a review staging-and-validation workflow. Normal reruns and a duplicate-file test were reported as successful during development.
 
-Normal reruns, duplicate-key checks, and a duplicate-file test were reported as successful during development.
+Full recovery from partial failures has not been independently verified. Incremental updates, late-arriving data, and duplicate content arriving under new filenames require additional scenario-specific testing before stronger guarantees can be claimed.
 
-However, full recovery from partial failures has not been independently verified. Incremental updates, late-arriving data, and duplicate content arriving under new filenames require additional scenario-specific testing before stronger guarantees can be claimed.
+## Pipeline orchestration
 
----
-
-## Pipeline Orchestration
-
-The pipeline is orchestrated through Databricks Lakeflow Jobs.
+Lakeflow Jobs orchestrates the pipeline in dependency order:
 
 ```mermaid
 flowchart TD
     A["bronze_ingestion"] --> B["silver_transformations"]
     B --> C["gold_transformations"]
-
     A -.-> D["Pipeline Audit"]
     B -.-> D
     C -.-> D
-
-    classDef task fill:#eaf2ff,stroke:#1d4ed8,stroke-width:3px,color:#172554
-    classDef monitoring fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#14532d
-
-    class A,B,C task
-    class D monitoring
 ```
 
 ### Job configuration
@@ -428,21 +383,17 @@ flowchart TD
 | Task retries | 1 retry per task |
 | Compute | Serverless environment |
 | Environment version | 2 |
-| Schedule | Daily at 06:00 Europe/Amsterdam |
+| Schedule | Configured for 06:00 Europe/Amsterdam; verify enabled status in each target |
 
-The schedule is configured in the development job and in the bundle YAML. A successful automatic scheduled execution should be verified from the job run history after the schedule triggers.
+A configured retry policy does not prove that every partial-failure scenario recovers safely. Scheduled execution should be confirmed in job run history after the schedule triggers.
 
-A configured retry policy does not by itself prove that every partial-failure scenario can recover safely.
+## Monitoring and audit
 
----
-
-## Monitoring and Audit Framework
-
-The pipeline uses a central Delta audit table:
+The pipeline writes audit records to an environment-specific Delta table, for example:
 
 `de_dev.monitoring.pipeline_audit`
 
-The audit framework records information including:
+The audit framework records fields including:
 
 - Audit ID.
 - Pipeline and task names.
@@ -458,93 +409,81 @@ The audit framework records information including:
 
 Successful audit records have been verified for Bronze, Silver, and Gold processing, including the seven Gold outputs.
 
-The current implementation records successful processing and overall success. Complete failure auditing, job-run-ID correlation, accurate per-table execution timing, and automated notifications require further verification or enhancement.
+Complete failure auditing, job-run-ID correlation, accurate per-table execution timing, and automated notifications require further verification or enhancement.
 
----
-
-## Repository Structure
-
-The main repository is organised around the following files:
+## Repository structure
 
 ```text
 databricks-ecommerce-lakehouse/
-│
 ├── databricks.yml
-│
 ├── resources/
 │   └── ecommerce_pipeline.yml
-│
 ├── notebooks/
 │   └── development/
 │       ├── bronze_ingestion.py
 │       ├── silver_transformations.py
 │       ├── gold_transformations.py
 │       └── pipeline_audit.py
-│
 ├── docs/
-│   └── architecture.png
-│
+│   ├── Architecture.png
+│   └── PROJECT_DOCUMENTATION.md
 └── README.md
 ```
 
-This structure reflects the core files used by the project. Add the architecture image at `docs/architecture.png` to display it in this README. If the file is stored elsewhere, update the image path accordingly.
+Ensure the image and documentation paths match the actual filenames and casing in the repository.
 
----
+## Environment and deployment
 
-## Environment and Deployment
-
-The project uses Databricks Asset Bundles to validate and deploy job resources.
-
-The configured bundle targets include:
+The bundle is configured with four target catalogs:
 
 | Target | Catalog |
 |---|---|
-| Development | `de_dev` |
-| Test | `de_test` |
-| Stage | `de_stage` |
-| Production | `de_prod` |
+| DEV | `de_dev` |
+| TEST | `de_test` |
+| STAGE | `de_stage` |
+| PROD | `de_prod` |
 
-The current verified workflow focuses on development. The existence of target configurations does not, by itself, mean all environments have been deployed or production-ready.
+The deployment workflow was run across all four targets during project setup. Deployment success alone does not prove that every environment has complete data, successful pipeline runs, appropriate access controls, or production readiness. Validate the job run history and environment-specific tables before relying on each target.
 
 ### Prerequisites
 
 - Access to a Databricks workspace.
-- Databricks CLI.
-- Git access to the project repository.
-- Permissions to deploy the Databricks bundle.
-- Access to the required development catalog and schemas.
+- Databricks CLI configured with an approved authentication method.
+- Git access to the repository.
+- Permissions to deploy the bundle and create or use required catalogs, schemas, and volumes.
+- Access to the relevant raw files in each environment.
 
 ### Clone the repository
 
 ```bash
 git clone https://github.com/fay-cloud/databricks-ecommerce-lakehouse.git
-
 cd databricks-ecommerce-lakehouse
 ```
 
 Authenticate the Databricks CLI using your workspace's approved authentication method.
 
-### Validate the development bundle
+### Validate and deploy
+
+Validate and deploy one target at a time:
 
 ```bash
 databricks bundle validate -t dev
-```
-
-### Deploy the development bundle
-
-```bash
 databricks bundle deploy -t dev
 ```
 
-### Run the end-to-end pipeline
+For another environment, replace `dev` with `test`, `stage`, or `prod`. Confirm the target catalog and deployment configuration before deploying.
+
+### Run the pipeline
 
 ```bash
 databricks bundle run -t dev ecommerce_pipeline
 ```
 
-The configured job executes the Bronze, Silver, and Gold tasks in dependency order.
+The job executes Bronze, Silver, and Gold in dependency order. Check the resulting job run and task statuses in the Databricks UI.
 
 ### Version control workflow
+
+Review local changes before committing:
 
 ```bash
 git status
@@ -552,51 +491,41 @@ git branch --show-current
 git pull --ff-only origin main
 ```
 
-After making and testing a code change, commit and push the intended files:
+After making and testing a code change, stage only the intended files:
 
 ```bash
 git add resources/ecommerce_pipeline.yml notebooks/development/
-
 git commit -m "Describe the pipeline improvement"
-
 git push origin main
 ```
 
-Review the staged changes before committing to ensure that only intended files are included.
+Review staged changes before committing to avoid including unrelated files. For deployment changes, validate the bundle, deploy the intended target, and verify the resulting job configuration and run.
 
-For scheduled deployment changes, update the bundle configuration, validate it, deploy it, and verify the resulting job configuration in Databricks.
+## Validation and testing
 
----
-
-## Validation and Testing
-
-The project has been validated through development runs and SQL checks.
+Previously recorded development evidence includes:
 
 | Validation area | Evidence |
 |---|---|
-| End-to-end orchestration | Bronze, Silver, and Gold tasks completed successfully in previous runs |
+| End-to-end orchestration | Bronze, Silver, and Gold tasks completed successfully in prior runs |
 | Silver transformations | Dataset counts and quality gates verified |
-| Gold transformations | Seven Gold outputs have successful audit records |
+| Gold transformations | Seven Gold outputs and successful audit records verified |
 | Payment fact uniqueness | 103,886 records and 103,886 distinct composite keys |
 | Order-item fact uniqueness | 112,650 records verified in prior validation |
 | Review ingestion | 99,224 records validated in the review publishing workflow |
 | Audit integration | Successful dataset-level and overall records verified |
-| Bundle validation | `databricks bundle validate -t dev` succeeded |
-| Bundle deployment | `databricks bundle deploy -t dev` succeeded |
-| Daily schedule | Configured for 06:00 Europe/Amsterdam |
+| Bundle validation | Development validation succeeded |
+| Bundle deployment | Development deployment succeeded |
+| Environment targets | Bundle targets configured for DEV, TEST, STAGE, and PROD |
 
-These results document the state of previously verified development runs. A fresh run may produce different results if source data or code changes.
+These results describe previously verified runs. A fresh run may differ if source data or code changes. Keep job run links and logs as evidence for future troubleshooting and project documentation.
 
----
-
-## Implementation Status
-
-This section distinguishes existing capabilities from planned work.
+## Implementation status
 
 | Capability | Status |
 |---|---|
 | Medallion architecture | Implemented |
-| Bronze ingestion for nine datasets | Implemented, using two ingestion approaches |
+| Bronze ingestion for nine datasets | Implemented using two ingestion approaches |
 | Auto Loader for eight datasets | Implemented |
 | Specialised review ingestion | Implemented |
 | Silver transformations and quarantine | Implemented |
@@ -604,51 +533,44 @@ This section distinguishes existing capabilities from planned work.
 | Data-quality checks and business-key validation | Implemented and tested |
 | Pipeline audit logging | Implemented; successful records verified |
 | Lakeflow Job orchestration | Configured and executed |
-| Development bundle validation and deployment | Verified |
-| Daily development schedule | Configured |
+| DEV, TEST, STAGE, PROD bundle targets | Configured and deployment attempted successfully |
 | Normal rerun stability | Verified in development |
 | Complete partial-failure recovery | Not independently verified |
-| Incremental Silver and Gold MERGE | Planned |
+| Incremental Silver and Gold `MERGE` | Planned |
 | Full late-arriving data and change-handling workflow | Planned |
 | ADLS Gen2 integration | Planned |
+| SQL Server, REST API, and SaaS source connectors | Planned |
 | Automated failure notifications | Planned or requires verification |
-| Complete CI/CD environment promotion | Requires further implementation and verification |
-| Production deployment and operational readiness | Not yet established |
+| Complete CI/CD promotion controls | Requires further implementation and verification |
+| Production operational readiness | Requires environment-specific verification |
 
----
+## Future enhancements
 
-## Future Enhancements
+1. **Incremental processing:** introduce Delta `MERGE` where appropriate, with tested rules for updates, replays, and late-arriving data.
+2. **Cloud storage:** integrate ADLS Gen2 using appropriate identity, permissions, and Unity Catalog external locations or volumes.
+3. **Additional sources:** implement and test connectors for selected databases, REST APIs, and SaaS platforms; document authentication, rate limits, pagination, incremental extraction, and source-specific limitations.
+4. **Operational monitoring:** strengthen failure auditing, job-run correlation, alerting, and pipeline-freshness checks.
+5. **Recovery testing:** validate retries and safe recovery from partial failures.
+6. **CI/CD promotion:** implement and verify controlled promotion through development, test, stage, and production.
+7. **Business analytics:** expose Gold datasets through Databricks SQL and build reporting dashboards.
+8. **Infrastructure as Code:** provision and manage cloud resources with Terraform where appropriate.
+9. **Governance and security:** strengthen access controls, lineage, secrets management, and PII handling.
 
-The next development phases will focus on:
+The historical Olist dataset is the foundation for the current pipeline. Incremental and CDC-like behaviour must be simulated or tested with a changing source dataset, and documented as such.
 
-1. **Incremental processing and change handling:** introduce Delta MERGE where appropriate, with tested rules for updates, replays, and late-arriving data.
-2. **Cloud storage integration:** connect ADLS Gen2 using appropriate identity, permissions, and Unity Catalog external locations or volumes.
-3. **Operational monitoring:** strengthen failure auditing, job-run correlation, alerting, and pipeline freshness checks.
-4. **Recovery testing:** validate task retries and safe recovery from partial failures.
-5. **CI/CD and environment promotion:** implement and verify controlled deployment across development, test, stage, and production.
-6. **Business analytics:** expose Gold datasets through Databricks SQL and build reporting dashboards.
-7. **Infrastructure as Code:** provision and manage cloud resources with Terraform where appropriate.
-8. **Governance and security:** strengthen access control, lineage, secrets management, and PII handling.
-
-The historical Olist dataset provides a foundation for these enhancements. Incremental and CDC-like behaviour will need to be simulated or sourced from a suitable changing dataset, with the simulation clearly documented.
-
----
-
-## Getting Started
+## Getting started
 
 To explore the project:
 
 1. Review the architecture diagram.
-2. Inspect `bronze_ingestion.py` to understand file ingestion and checkpointing.
-3. Review `silver_transformations.py` for validation, cleansing, and quarantine logic.
-4. Review `gold_transformations.py` for dimensional modelling and analytical aggregations.
-5. Inspect `pipeline_audit.py` and the monitoring table for execution traceability.
-6. Review `resources/ecommerce_pipeline.yml` for orchestration, task dependencies, retries, and scheduling.
+2. Inspect `notebooks/development/bronze_ingestion.py` for ingestion and checkpointing.
+3. Review `notebooks/development/silver_transformations.py` for cleansing, validation, and quarantine.
+4. Review `notebooks/development/gold_transformations.py` for dimensional modelling and analytical aggregations.
+5. Inspect `notebooks/development/pipeline_audit.py` and the monitoring table for traceability.
+6. Review `resources/ecommerce_pipeline.yml` for dependencies, retries, and scheduling.
 7. Validate and deploy the bundle in an authorised development workspace.
 
-Use the current development implementation as the reference point when evaluating planned production enhancements.
-
----
+Use the current implementation as the reference point when assessing planned enhancements.
 
 ## Author
 
@@ -656,6 +578,5 @@ Use the current development implementation as the reference point when evaluatin
 
 Data Engineer | Python | SQL | Apache Spark | Azure Databricks | Delta Lake | Data Modelling | Data Quality | Pipeline Orchestration
 
-GitHub: [fay-cloud](https://github.com/fay-cloud)
-
-Repository: [databricks-ecommerce-lakehouse](https://github.com/fay-cloud/databricks-ecommerce-lakehouse)
+- GitHub: [fay-cloud](https://github.com/fay-cloud)
+- Repository: [databricks-ecommerce-lakehouse](https://github.com/fay-cloud/databricks-ecommerce-lakehouse)
