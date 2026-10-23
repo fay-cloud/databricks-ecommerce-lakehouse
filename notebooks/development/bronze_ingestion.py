@@ -19,14 +19,21 @@ from pipeline_audit import log_audit_record
 # ---------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------
-CATALOG = "de_dev"
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--catalog", default="de_dev")
+parser.add_argument("--environment", default="dev")
+args, _ = parser.parse_known_args()
+
+CATALOG = args.catalog
 BRONZE_SCHEMA = f"{CATALOG}.bronze"
-RAW_PATH = "/Volumes/de_dev/bronze/olist_raw_files"
-STATE_PATH = "/Volumes/de_dev/bronze/olist_pipeline_state"
+RAW_PATH = f"/Volumes/{CATALOG}/bronze/olist_raw_files"
+STATE_PATH = f"/Volumes/{CATALOG}/bronze/olist_pipeline_state"
 
 PIPELINE_NAME = "ecommerce_pipeline"
 TASK_NAME = "bronze_ingestion"
-ENVIRONMENT = "dev"
+ENVIRONMENT = args.environment
 
 SOURCES = [
     ("olist_customers_dataset.csv", "olist_customers"),
